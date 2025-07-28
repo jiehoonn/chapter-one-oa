@@ -1,11 +1,20 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, FlatList, Modal, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, FlatList, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useThemeColor } from '@/hooks/useThemeColor';
+
+type Priority = '!!!' | '!!' | '!';
+
+interface Subtask {
+  id: string;
+  name: string;
+  completed: boolean;
+}
 
 interface Task {
   id: string;
@@ -14,9 +23,9 @@ interface Task {
   dueDate: Date;
   completed: boolean;
   category: string;
+  priority?: Priority;
+  subtasks?: Subtask[];
 }
-
-type IconName = typeof PREDEFINED_ICONS[number];
 
 interface CategoryList {
   category: string;
@@ -30,6 +39,17 @@ interface NewListData {
   color: string;
   icon: IconName;
 }
+
+interface NewTaskData {
+  title: string;
+  description: string;
+  dueDate: Date;
+  priority?: Priority;
+  subtasks: string[];
+  categoryName: string;
+}
+
+type IconName = typeof PREDEFINED_ICONS[number];
 
 const PREDEFINED_COLORS = [
   '#FF9500', // Orange
@@ -57,14 +77,26 @@ const PREDEFINED_ICONS = [
   'checkmark.circle.fill',
 ] as const;
 
+const PRIORITY_OPTIONS: Priority[] = ['!!!', '!!', '!'];
+
 export default function ListsScreen() {
   const [categoryLists, setCategoryLists] = useState<CategoryList[]>([]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [newListData, setNewListData] = useState<NewListData>({
     name: '',
     color: PREDEFINED_COLORS[0],
     icon: PREDEFINED_ICONS[0],
+  });
+  const [newTaskData, setNewTaskData] = useState<NewTaskData>({
+    title: '',
+    description: '',
+    dueDate: new Date(),
+    priority: undefined,
+    subtasks: [''],
+    categoryName: '',
   });
   
   const borderColor = useThemeColor({ light: '#E5E5E7', dark: '#2C2C2E' }, 'text');
@@ -112,6 +144,89 @@ export default function ListsScreen() {
       icon: PREDEFINED_ICONS[0],
     });
     setShowCreateModal(false);
+  };
+
+  const openTaskModal = (categoryName: string) => {
+    setNewTaskData(prev => ({
+      ...prev,
+      categoryName,
+      title: '',
+      description: '',
+      dueDate: new Date(),
+      priority: undefined,
+      subtasks: [''],
+    }));
+    setShowDatePicker(false);
+    setShowTaskModal(true);
+  };
+
+  const createNewTask = () => {
+    if (!newTaskData.title.trim()) {
+      Alert.alert('Error', 'Please enter a task title');
+      return;
+    }
+
+    const newTask: Task = {
+      id: Date.now().toString(),
+      title: newTaskData.title.trim(),
+      description: newTaskData.description.trim() || undefined,
+      dueDate: newTaskData.dueDate,
+      completed: false,
+      category: newTaskData.categoryName,
+      priority: newTaskData.priority,
+      subtasks: newTaskData.subtasks
+        .filter(subtask => subtask.trim())
+        .map((subtask, index) => ({
+          id: `${Date.now()}-${index}`,
+          name: subtask.trim(),
+          completed: false,
+        })),
+    };
+
+    setCategoryLists(prev =>
+      prev.map(categoryList =>
+        categoryList.category === newTaskData.categoryName
+          ? { ...categoryList, tasks: [...categoryList.tasks, newTask] }
+          : categoryList
+      )
+    );
+
+    setShowDatePicker(false);
+    setShowTaskModal(false);
+  };
+
+  const closeTaskModal = () => {
+    setShowDatePicker(false);
+    setShowTaskModal(false);
+  };
+
+  const addSubtask = () => {
+    setNewTaskData(prev => ({
+      ...prev,
+      subtasks: [...prev.subtasks, ''],
+    }));
+  };
+
+  const updateSubtask = (index: number, value: string) => {
+    setNewTaskData(prev => ({
+      ...prev,
+      subtasks: prev.subtasks.map((subtask, i) => (i === index ? value : subtask)),
+    }));
+  };
+
+  const removeSubtask = (index: number) => {
+    setNewTaskData(prev => ({
+      ...prev,
+      subtasks: prev.subtasks.filter((_, i) => i !== index),
+    }));
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   const toggleTaskCompletion = (taskId: string) => {
@@ -185,15 +300,22 @@ export default function ListsScreen() {
       <View style={styles.taskHeader}>
         <View style={[styles.categoryIndicator, { backgroundColor: categoryColor }]} />
         <View style={styles.taskInfo}>
-          <ThemedText
-            type="defaultSemiBold"
-            style={[
-              styles.taskTitle,
-              item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
-            ]}
-          >
-            {item.title}
-          </ThemedText>
+          <View style={styles.taskTitleRow}>
+            <ThemedText
+              type="defaultSemiBold"
+              style={[
+                styles.taskTitle,
+                item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
+              ]}
+            >
+              {item.title}
+            </ThemedText>
+            {item.priority && (
+              <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
+                {item.priority}
+              </ThemedText>
+            )}
+          </View>
           {item.description && (
             <ThemedText
               style={[
@@ -203,6 +325,18 @@ export default function ListsScreen() {
             >
               {item.description}
             </ThemedText>
+          )}
+          <ThemedText style={styles.dueDateText}>
+            Due: {formatDate(item.dueDate)}
+          </ThemedText>
+          {item.subtasks && item.subtasks.length > 0 && (
+            <View style={styles.subtasksContainer}>
+              {item.subtasks.map((subtask) => (
+                <ThemedText key={subtask.id} style={styles.subtaskText}>
+                  • {subtask.name}
+                </ThemedText>
+              ))}
+            </View>
           )}
         </View>
         <View style={[
@@ -298,6 +432,15 @@ export default function ListsScreen() {
                 {renderTaskItem({ item: task, categoryColor: item.color })}
               </View>
             ))}
+
+            {/* Add Task Button */}
+            <TouchableOpacity
+              style={[styles.addTaskButton, { borderColor }]}
+              onPress={() => openTaskModal(item.category)}
+            >
+              <IconSymbol name="plus" size={16} color={borderColor} />
+              <ThemedText style={styles.addTaskButtonText}>Add Task</ThemedText>
+            </TouchableOpacity>
           </Animated.View>
         )}
       </View>
@@ -333,10 +476,44 @@ export default function ListsScreen() {
     </TouchableOpacity>
   );
 
+  const renderPriorityOption = (priority: Priority) => (
+    <TouchableOpacity
+      key={priority}
+      style={[
+        styles.priorityOption,
+        { borderColor },
+        newTaskData.priority === priority && { backgroundColor: '#FF3B30' }
+      ]}
+      onPress={() => setNewTaskData(prev => ({ 
+        ...prev, 
+        priority: prev.priority === priority ? undefined : priority 
+      }))}
+    >
+      <ThemedText
+        style={[
+          styles.priorityText,
+          newTaskData.priority === priority && { color: '#FFFFFF' }
+        ]}
+      >
+        {priority}
+      </ThemedText>
+    </TouchableOpacity>
+  );
+
   const totalTasks = categoryLists.reduce((acc, cat) => acc + cat.tasks.length, 0);
   const totalCompleted = categoryLists.reduce((acc, cat) => 
     acc + cat.tasks.filter(task => task.completed).length, 0
   );
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || newTaskData.dueDate;
+    setShowDatePicker(Platform.OS === 'ios');
+    setNewTaskData(prev => ({ ...prev, dueDate: currentDate }));
+  };
+
+  const showDatePickerModal = () => {
+    setShowDatePicker(true);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -435,6 +612,117 @@ export default function ListsScreen() {
             </View>
           </SafeAreaView>
         </Modal>
+
+        {/* Create Task Modal */}
+        <Modal
+          visible={showTaskModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+        >
+          <SafeAreaView style={[styles.modalContainer, { backgroundColor: modalBackground }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={closeTaskModal}>
+                <ThemedText style={styles.modalCancelText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <ThemedText type="subtitle">New Task</ThemedText>
+              <TouchableOpacity onPress={createNewTask}>
+                <ThemedText style={[styles.modalCreateText, { color: '#007AFF' }]}>
+                  Create
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              {/* Task Title */}
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.sectionLabel}>Task Name</ThemedText>
+                <TextInput
+                  style={[styles.textInput, { backgroundColor: inputBackground, borderColor, color: textColor }]}
+                  value={newTaskData.title}
+                  onChangeText={(text) => setNewTaskData(prev => ({ ...prev, title: text }))}
+                  placeholder="Enter task name"
+                  placeholderTextColor={borderColor}
+                />
+              </View>
+
+              {/* Task Description */}
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.sectionLabel}>Description (Optional)</ThemedText>
+                <TextInput
+                  style={[styles.textArea, { backgroundColor: inputBackground, borderColor, color: textColor }]}
+                  value={newTaskData.description}
+                  onChangeText={(text) => setNewTaskData(prev => ({ ...prev, description: text }))}
+                  placeholder="Enter task description"
+                  placeholderTextColor={borderColor}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              {/* Due Date */}
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.sectionLabel}>Due Date</ThemedText>
+                <TouchableOpacity
+                  style={[styles.dateButton, { backgroundColor: inputBackground, borderColor }]}
+                  onPress={showDatePickerModal}
+                >
+                  <ThemedText style={{ color: textColor }}>
+                    {formatDate(newTaskData.dueDate)}
+                  </ThemedText>
+                </TouchableOpacity>
+                
+                {showDatePicker && (
+                  <DateTimePicker
+                    testID="dateTimePicker"
+                    value={newTaskData.dueDate}
+                    mode="date"
+                    is24Hour={true}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onDateChange}
+                    minimumDate={new Date()}
+                  />
+                )}
+              </View>
+
+              {/* Priority */}
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.sectionLabel}>Priority (Optional)</ThemedText>
+                <View style={styles.priorityGrid}>
+                  {PRIORITY_OPTIONS.map(renderPriorityOption)}
+                </View>
+              </View>
+
+              {/* Subtasks */}
+              <View style={styles.inputSection}>
+                <View style={styles.subtaskHeader}>
+                  <ThemedText style={styles.sectionLabel}>Subtasks (Optional)</ThemedText>
+                  <TouchableOpacity onPress={addSubtask} style={styles.addSubtaskButton}>
+                    <IconSymbol name="plus" size={16} color="#007AFF" />
+                  </TouchableOpacity>
+                </View>
+                {newTaskData.subtasks.map((subtask, index) => (
+                  <View key={index} style={styles.subtaskRow}>
+                    <TextInput
+                      style={[styles.subtaskInput, { backgroundColor: inputBackground, borderColor, color: textColor }]}
+                      value={subtask}
+                      onChangeText={(text) => updateSubtask(index, text)}
+                      placeholder="Enter subtask"
+                      placeholderTextColor={borderColor}
+                    />
+                    {newTaskData.subtasks.length > 1 && (
+                      <TouchableOpacity
+                        onPress={() => removeSubtask(index)}
+                        style={styles.removeSubtaskButton}
+                      >
+                        <ThemedText style={{ color: '#FF3B30' }}>✕</ThemedText>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
       </ThemedView>
     </SafeAreaView>
   );
@@ -527,13 +815,39 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
-  taskTitle: {
+  taskTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
+  },
+  taskTitle: {
+    fontSize: 16,
+    flex: 1,
+  },
+  priorityBadge: {
+    fontSize: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginLeft: 8,
   },
   taskDescription: {
     opacity: 0.8,
     lineHeight: 20,
     fontSize: 14,
+  },
+  dueDateText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
+  },
+  subtasksContainer: {
+    marginTop: 8,
+  },
+  subtaskText: {
+    fontSize: 14,
+    opacity: 0.8,
+    marginBottom: 4,
   },
   checkbox: {
     width: 24,
@@ -605,6 +919,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
   },
+  textArea: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    borderWidth: 1,
+    minHeight: 80,
+  },
+  dateButton: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5E7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   colorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -639,6 +970,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  priorityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: -8, // Adjust for spacing between options
+  },
+  priorityOption: {
+    width: '30%', // 3 options per row
+    height: 40,
+    borderRadius: 8,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5E7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  priorityText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  subtaskHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addSubtaskButton: {
+    padding: 8,
+  },
+  subtaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  subtaskInput: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#E5E5E7',
+    marginRight: 8,
+  },
+  removeSubtaskButton: {
+    padding: 4,
+  },
   previewSection: {
     marginTop: -72,
   },
@@ -647,5 +1025,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
+  },
+  addTaskButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
+  },
+  addTaskButtonText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 
