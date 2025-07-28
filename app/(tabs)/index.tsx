@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, LayoutAnimation, Platform, StyleSheet, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Snackbar } from '@/components/Snackbar';
@@ -17,13 +17,41 @@ export default function HomeScreen() {
   const borderColor = useThemeColor({ light: '#E5E5E7', dark: '#2C2C2E' }, 'text');
   const completedTextColor = useThemeColor({ light: '#8E8E93', dark: '#8E8E93' }, 'text');
 
+  // Configure layout animations for Android
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     // Get tasks due today whenever categoryLists changes
     const todayTasks = getTasksDueToday();
-    setTasks(todayTasks);
+    // Sort tasks: incomplete tasks first, completed tasks at the bottom
+    const sortedTasks = todayTasks.sort((a, b) => {
+      if (a.completed === b.completed) return 0;
+      return a.completed ? 1 : -1; // Completed tasks go to bottom
+    });
+    setTasks(sortedTasks);
   }, [categoryLists, getTasksDueToday]);
 
   const handleToggleTaskCompletion = (taskId: string) => {
+    // Configure the layout animation for smooth reordering
+    LayoutAnimation.configureNext({
+      duration: 300,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.scaleXY,
+        springDamping: 0.7,
+      },
+    });
+    
     toggleTaskCompletion(taskId);
   };
 
@@ -215,13 +243,6 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Future Categories Section (placeholder) */}
-        <View style={styles.categoriesPlaceholder}>
-          <ThemedText style={styles.placeholderText}>
-            📁 Categories coming soon...
-          </ThemedText>
-        </View>
-
         {/* Snackbar */}
         <Snackbar
           visible={snackbarVisible}
@@ -382,14 +403,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.7,
     lineHeight: 20,
-  },
-  categoriesPlaceholder: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  placeholderText: {
-    opacity: 0.5,
-    fontSize: 14,
   },
   helpText: {
     fontSize: 12,

@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, FlatList, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, FlatList, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Snackbar } from '@/components/Snackbar';
@@ -89,6 +89,15 @@ export default function ListsScreen() {
     chevron: Animated.Value;
     content: Animated.Value;
   }>>({});
+
+  // Configure layout animations for Android
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // Initialize animation values for existing categories
@@ -316,7 +325,23 @@ export default function ListsScreen() {
         { borderColor },
         item.completed && styles.completedTask
       ]}
-      onPress={() => toggleTaskCompletion(item.id)}
+      onPress={() => {
+        // Configure the layout animation for smooth reordering
+        LayoutAnimation.configureNext({
+          duration: 300,
+          create: {
+            type: LayoutAnimation.Types.easeInEaseOut,
+            property: LayoutAnimation.Properties.opacity,
+          },
+          update: {
+            type: LayoutAnimation.Types.easeInEaseOut,
+            property: LayoutAnimation.Properties.scaleXY,
+            springDamping: 0.7,
+          },
+        });
+        
+        toggleTaskCompletion(item.id);
+      }}
       onLongPress={() => handleLongPress(item.id, item.title)}
       delayLongPress={600}
     >
@@ -394,6 +419,12 @@ export default function ListsScreen() {
       outputRange: [0.95, 1]
     });
 
+    // Sort tasks within this category: incomplete first, completed at bottom
+    const sortedTasks = [...item.tasks].sort((a, b) => {
+      if (a.completed === b.completed) return 0;
+      return a.completed ? 1 : -1; // Completed tasks go to bottom
+    });
+
     return (
       <View style={styles.categorySection}>
         <TouchableOpacity 
@@ -450,7 +481,7 @@ export default function ListsScreen() {
               </View>
             </View>
 
-            {item.tasks.map((task) => (
+            {sortedTasks.map((task) => (
               <View key={task.id}>
                 {renderTaskItem({ item: task, categoryColor: item.color })}
               </View>
