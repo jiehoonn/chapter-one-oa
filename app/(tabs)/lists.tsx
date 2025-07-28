@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useThemeColor } from '@/hooks/useThemeColor';
 
 interface Task {
@@ -91,8 +92,15 @@ const CATEGORY_COLORS = {
 
 export default function ListsScreen() {
   const [categoryLists, setCategoryLists] = useState<CategoryList[]>([]);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const borderColor = useThemeColor({ light: '#E5E5E7', dark: '#2C2C2E' }, 'text');
   const completedTextColor = useThemeColor({ light: '#8E8E93', dark: '#8E8E93' }, 'text');
+  
+  // Animation refs for each category
+  const animationRefs = useRef<Record<string, {
+    chevron: Animated.Value;
+    content: Animated.Value;
+  }>>({});
 
   useEffect(() => {
     // Group tasks by category
@@ -113,6 +121,16 @@ export default function ListsScreen() {
     }));
 
     setCategoryLists(categoryListsArray);
+
+    // Initialize animation values for each category
+    categoryListsArray.forEach(({ category }) => {
+      if (!animationRefs.current[category]) {
+        animationRefs.current[category] = {
+          chevron: new Animated.Value(0),
+          content: new Animated.Value(1)
+        };
+      }
+    });
   }, []);
 
   const toggleTaskCompletion = (taskId: string) => {
@@ -124,6 +142,54 @@ export default function ListsScreen() {
         )
       }))
     );
+  };
+
+  const toggleCategoryCollapse = (category: string) => {
+    const isCurrentlyCollapsed = collapsedCategories.has(category);
+    const animations = animationRefs.current[category];
+    
+    if (!animations) return;
+
+    if (isCurrentlyCollapsed) {
+      // Expanding: Show content first, then animate in
+      setCollapsedCategories(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(category);
+        return newSet;
+      });
+      
+      Animated.timing(animations.chevron, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+
+      Animated.timing(animations.content, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // Collapsing: Animate out, then hide content
+      Animated.timing(animations.chevron, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+
+      Animated.timing(animations.content, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        // Hide content after animation completes
+        setCollapsedCategories(prev => {
+          const newSet = new Set(prev);
+          newSet.add(category);
+          return newSet;
+        });
+      });
+    }
   };
 
   const renderTaskItem = ({ item, categoryColor }: { item: Task; categoryColor: string }) => (
@@ -174,11 +240,42 @@ export default function ListsScreen() {
   const renderCategorySection = ({ item }: { item: CategoryList }) => {
     const completedCount = item.tasks.filter(task => task.completed).length;
     const totalCount = item.tasks.length;
+    const isCollapsed = collapsedCategories.has(item.category);
+    const animations = animationRefs.current[item.category];
+
+    if (!animations) return null;
+
+    const chevronRotation = animations.chevron.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['90deg', '0deg']
+    });
+
+    const contentOpacity = animations.content;
+    const contentScale = animations.content.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.95, 1]
+    });
 
     return (
       <View style={styles.categorySection}>
-        <View style={styles.categoryHeader}>
+        <TouchableOpacity 
+          style={styles.categoryHeader}
+          onPress={() => toggleCategoryCollapse(item.category)}
+          activeOpacity={0.7}
+        >
           <View style={styles.categoryTitleRow}>
+            <Animated.View
+              style={{
+                transform: [{ rotate: chevronRotation }],
+                marginRight: 8
+              }}
+            >
+              <IconSymbol
+                name="chevron.right"
+                size={16}
+                color={borderColor}
+              />
+            </Animated.View>
             <View style={[styles.categoryDot, { backgroundColor: item.color }]} />
             <ThemedText type="subtitle" style={styles.categoryTitle}>
               {item.category}
@@ -187,27 +284,36 @@ export default function ListsScreen() {
           <ThemedText style={styles.categoryCount}>
             {completedCount}/{totalCount}
           </ThemedText>
-        </View>
+        </TouchableOpacity>
         
-        <View style={styles.categoryProgress}>
-          <View style={styles.progressBarContainer}>
-            <View
-              style={[
-                styles.progressBar,
-                { 
-                  backgroundColor: item.color,
-                  width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : '0%'
-                }
-              ]}
-            />
-          </View>
-        </View>
+        {!isCollapsed && (
+          <Animated.View
+            style={{
+              opacity: contentOpacity,
+              transform: [{ scale: contentScale }]
+            }}
+          >
+            <View style={styles.categoryProgress}>
+              <View style={styles.progressBarContainer}>
+                <View
+                  style={[
+                    styles.progressBar,
+                    { 
+                      backgroundColor: item.color,
+                      width: totalCount > 0 ? `${(completedCount / totalCount) * 100}%` : '0%'
+                    }
+                  ]}
+                />
+              </View>
+            </View>
 
-        {item.tasks.map((task) => (
-          <View key={task.id}>
-            {renderTaskItem({ item: task, categoryColor: item.color })}
-          </View>
-        ))}
+            {item.tasks.map((task) => (
+              <View key={task.id}>
+                {renderTaskItem({ item: task, categoryColor: item.color })}
+              </View>
+            ))}
+          </Animated.View>
+        )}
       </View>
     );
   };
