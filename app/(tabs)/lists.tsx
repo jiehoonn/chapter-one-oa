@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, FlatList, Modal, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -16,85 +16,62 @@ interface Task {
   category: string;
 }
 
+type IconName = typeof PREDEFINED_ICONS[number];
+
 interface CategoryList {
   category: string;
   tasks: Task[];
   color: string;
+  icon: IconName;
 }
 
-// Mock data with more tasks for demonstration
-const MOCK_TASKS: Task[] = [
-  {
-    id: '1',
-    title: 'Review project proposals',
-    description: 'Go through the Q4 project proposals and provide feedback',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Work'
-  },
-  {
-    id: '2',
-    title: 'Grocery shopping',
-    description: 'Buy ingredients for weekend meal prep',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Personal'
-  },
-  {
-    id: '3',
-    title: 'Call dentist',
-    description: 'Schedule regular checkup appointment',
-    dueDate: new Date(),
-    completed: true,
-    category: 'Health'
-  },
-  {
-    id: '4',
-    title: 'Update portfolio website',
-    description: 'Add recent projects and update resume',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Professional'
-  },
-  {
-    id: '5',
-    title: 'Team standup meeting',
-    description: 'Daily sync with the development team',
-    dueDate: new Date(),
-    completed: true,
-    category: 'Work'
-  },
-  {
-    id: '6',
-    title: 'Plan weekend trip',
-    description: 'Research destinations and book accommodations',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Personal'
-  },
-  {
-    id: '7',
-    title: 'Code review session',
-    description: 'Review pull requests from team members',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Professional'
-  }
+interface NewListData {
+  name: string;
+  color: string;
+  icon: IconName;
+}
+
+const PREDEFINED_COLORS = [
+  '#FF9500', // Orange
+  '#34C759', // Green
+  '#FF3B30', // Red
+  '#007AFF', // Blue
+  '#AF52DE', // Purple
+  '#FF2D92', // Pink
+  '#5AC8FA', // Light Blue
+  '#FFCC02', // Yellow
 ];
 
-const CATEGORY_COLORS = {
-  Work: '#FF9500',
-  Personal: '#34C759',
-  Health: '#FF3B30',
-  Professional: '#007AFF',
-  Default: '#8E8E93'
-};
+const PREDEFINED_ICONS = [
+  'list.bullet',
+  'folder.fill',
+  'briefcase.fill',
+  'house.fill',
+  'heart.fill',
+  'star.fill',
+  'bookmark.fill',
+  'flag.fill',
+  'target',
+  'calendar',
+  'clock.fill',
+  'checkmark.circle.fill',
+] as const;
 
 export default function ListsScreen() {
   const [categoryLists, setCategoryLists] = useState<CategoryList[]>([]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newListData, setNewListData] = useState<NewListData>({
+    name: '',
+    color: PREDEFINED_COLORS[0],
+    icon: PREDEFINED_ICONS[0],
+  });
+  
   const borderColor = useThemeColor({ light: '#E5E5E7', dark: '#2C2C2E' }, 'text');
   const completedTextColor = useThemeColor({ light: '#8E8E93', dark: '#8E8E93' }, 'text');
+  const modalBackground = useThemeColor({ light: '#FFFFFF', dark: '#1C1C1E' }, 'background');
+  const inputBackground = useThemeColor({ light: '#F2F2F7', dark: '#2C2C2E' }, 'background');
+  const textColor = useThemeColor({ light: '#000000', dark: '#FFFFFF' }, 'text');
   
   // Animation refs for each category
   const animationRefs = useRef<Record<string, {
@@ -103,35 +80,39 @@ export default function ListsScreen() {
   }>>({});
 
   useEffect(() => {
-    // Group tasks by category
-    const grouped = MOCK_TASKS.reduce((acc, task) => {
-      const category = task.category || 'Other';
-      if (!acc[category]) {
-        acc[category] = [];
-      }
-      acc[category].push(task);
-      return acc;
-    }, {} as Record<string, Task[]>);
-
-    // Convert to array of CategoryList objects
-    const categoryListsArray = Object.entries(grouped).map(([category, tasks]) => ({
-      category,
-      tasks,
-      color: CATEGORY_COLORS[category as keyof typeof CATEGORY_COLORS] || CATEGORY_COLORS.Default
-    }));
-
-    setCategoryLists(categoryListsArray);
-
-    // Initialize animation values for each category
-    categoryListsArray.forEach(({ category }) => {
-      if (!animationRefs.current[category]) {
-        animationRefs.current[category] = {
-          chevron: new Animated.Value(0),
-          content: new Animated.Value(1)
-        };
-      }
-    });
+    // Initialize with empty state - ready for actual task data
+    setCategoryLists([]);
   }, []);
+
+  const createNewList = () => {
+    if (!newListData.name.trim()) {
+      Alert.alert('Error', 'Please enter a list name');
+      return;
+    }
+
+    const newList: CategoryList = {
+      category: newListData.name.trim(),
+      tasks: [],
+      color: newListData.color,
+      icon: newListData.icon,
+    };
+
+    setCategoryLists(prev => [...prev, newList]);
+    
+    // Initialize animation values for the new category
+    animationRefs.current[newList.category] = {
+      chevron: new Animated.Value(0),
+      content: new Animated.Value(1)
+    };
+
+    // Reset modal state
+    setNewListData({
+      name: '',
+      color: PREDEFINED_COLORS[0],
+      icon: PREDEFINED_ICONS[0],
+    });
+    setShowCreateModal(false);
+  };
 
   const toggleTaskCompletion = (taskId: string) => {
     setCategoryLists(prevLists =>
@@ -276,7 +257,12 @@ export default function ListsScreen() {
                 color={borderColor}
               />
             </Animated.View>
-            <View style={[styles.categoryDot, { backgroundColor: item.color }]} />
+            <IconSymbol
+              name={item.icon}
+              size={20}
+              color={item.color}
+              style={{ marginRight: 8 }}
+            />
             <ThemedText type="subtitle" style={styles.categoryTitle}>
               {item.category}
             </ThemedText>
@@ -318,6 +304,35 @@ export default function ListsScreen() {
     );
   };
 
+  const renderColorOption = (color: string) => (
+    <TouchableOpacity
+      key={color}
+      style={[
+        styles.colorOption,
+        { backgroundColor: color },
+        newListData.color === color && styles.selectedColorOption
+      ]}
+      onPress={() => setNewListData(prev => ({ ...prev, color }))}
+    />
+  );
+
+  const renderIconOption = (icon: IconName) => (
+    <TouchableOpacity
+      key={icon}
+      style={[
+        styles.iconOption,
+        newListData.icon === icon && { backgroundColor: newListData.color }
+      ]}
+      onPress={() => setNewListData(prev => ({ ...prev, icon }))}
+    >
+      <IconSymbol
+        name={icon}
+        size={24}
+        color={newListData.icon === icon ? '#FFFFFF' : borderColor}
+      />
+    </TouchableOpacity>
+  );
+
   const totalTasks = categoryLists.reduce((acc, cat) => acc + cat.tasks.length, 0);
   const totalCompleted = categoryLists.reduce((acc, cat) => 
     acc + cat.tasks.filter(task => task.completed).length, 0
@@ -336,6 +351,15 @@ export default function ListsScreen() {
           </ThemedText>
         </View>
 
+        {/* Create New List Button */}
+        <TouchableOpacity
+          style={[styles.createButton, { borderColor }]}
+          onPress={() => setShowCreateModal(true)}
+        >
+          <IconSymbol name="plus" size={20} color={borderColor} />
+          <ThemedText style={styles.createButtonText}>Create New List</ThemedText>
+        </TouchableOpacity>
+
         {/* Categories List */}
         <FlatList
           data={categoryLists}
@@ -344,6 +368,73 @@ export default function ListsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.categoriesList}
         />
+
+        {/* Create List Modal */}
+        <Modal
+          visible={showCreateModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+        >
+          <SafeAreaView style={[styles.modalContainer, { backgroundColor: modalBackground }]}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                <ThemedText style={styles.modalCancelText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <ThemedText type="subtitle">New List</ThemedText>
+              <TouchableOpacity onPress={createNewList}>
+                <ThemedText style={[styles.modalCreateText, { color: newListData.color }]}>
+                  Create
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              {/* List Name Input */}
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.sectionLabel}>List Name</ThemedText>
+                <TextInput
+                  style={[styles.textInput, { backgroundColor: inputBackground, borderColor, color: textColor }]}
+                  value={newListData.name}
+                  onChangeText={(text) => setNewListData(prev => ({ ...prev, name: text }))}
+                  placeholder="Enter list name"
+                  placeholderTextColor={borderColor}
+                />
+              </View>
+
+              {/* Color Selection */}
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.sectionLabel}>Color</ThemedText>
+                <View style={styles.colorGrid}>
+                  {PREDEFINED_COLORS.map(renderColorOption)}
+                </View>
+              </View>
+
+              {/* Icon Selection */}
+              <View style={styles.inputSection}>
+                <ThemedText style={styles.sectionLabel}>Icon</ThemedText>
+                <View style={styles.iconGrid}>
+                  {PREDEFINED_ICONS.map(renderIconOption)}
+                </View>
+              </View>
+
+              {/* Preview */}
+              <View style={styles.previewSection}>
+                <ThemedText style={styles.sectionLabel}>Preview</ThemedText>
+                <View style={[styles.previewCard, { borderColor }]}>
+                  <IconSymbol
+                    name={newListData.icon}
+                    size={20}
+                    color={newListData.color}
+                    style={{ marginRight: 8 }}
+                  />
+                  <ThemedText type="subtitle">
+                    {newListData.name || 'List Name'}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          </SafeAreaView>
+        </Modal>
       </ThemedView>
     </SafeAreaView>
   );
@@ -460,5 +551,101 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+  },
+  createButtonText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E7',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: '#007AFF',
+  },
+  modalCreateText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalContent: {
+    padding: 20,
+  },
+  inputSection: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    borderWidth: 1,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: -8, // Adjust for spacing between options
+  },
+  colorOption: {
+    width: '22%', // 4 options per row
+    height: 60,
+    borderRadius: 10,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5E7',
+  },
+  selectedColorOption: {
+    borderColor: '#007AFF',
+    borderWidth: 2,
+  },
+  iconGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: -8, // Adjust for spacing between options
+  },
+  iconOption: {
+    width: '23%', // 4 options per row
+    aspectRatio: 1.2,
+    borderRadius: 10,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E5E5E7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewSection: {
+    marginTop: -72,
+  },
+  previewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
   },
 }); 

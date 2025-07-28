@@ -16,42 +16,6 @@ interface Task {
   category?: string; // for future category implementation
 }
 
-// Mock data for demonstration - replace with actual data source later
-const MOCK_TASKS: Task[] = [
-  {
-    id: '1',
-    title: 'Review project proposals',
-    description: 'Go through the Q4 project proposals and provide feedback',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Work'
-  },
-  {
-    id: '2',
-    title: 'Grocery shopping',
-    description: 'Buy ingredients for weekend meal prep',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Personal'
-  },
-  {
-    id: '3',
-    title: 'Call dentist',
-    description: 'Schedule regular checkup appointment',
-    dueDate: new Date(),
-    completed: true,
-    category: 'Health'
-  },
-  {
-    id: '4',
-    title: 'Update portfolio website',
-    description: 'Add recent projects and update resume',
-    dueDate: new Date(),
-    completed: false,
-    category: 'Professional'
-  }
-];
-
 export default function HomeScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const cardBackground = useThemeColor({}, 'background');
@@ -59,13 +23,8 @@ export default function HomeScreen() {
   const completedTextColor = useThemeColor({ light: '#8E8E93', dark: '#8E8E93' }, 'text');
 
   useEffect(() => {
-    // Filter tasks for today - in real app, this would be an API call
-    const today = new Date();
-    const todayTasks = MOCK_TASKS.filter(task => {
-      const taskDate = new Date(task.dueDate);
-      return taskDate.toDateString() === today.toDateString();
-    });
-    setTasks(todayTasks);
+    // Initialize with empty state - ready for actual task data
+    setTasks([]);
   }, []);
 
   const toggleTaskCompletion = (taskId: string) => {
