@@ -1,38 +1,73 @@
 import React, { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Snackbar } from '@/components/Snackbar';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { Task, useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 
-// Task interface for type safety
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  dueDate: Date;
-  completed: boolean;
-  category?: string; // for future category implementation
-}
-
 export default function HomeScreen() {
+  const { getTasksDueToday, toggleTaskCompletion, deleteTask, restoreTask, categoryLists } = useTaskContext();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const cardBackground = useThemeColor({}, 'background');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [deletedTaskId, setDeletedTaskId] = useState<string | null>(null);
+  const [deletedTaskTitle, setDeletedTaskTitle] = useState<string>('');
   const borderColor = useThemeColor({ light: '#E5E5E7', dark: '#2C2C2E' }, 'text');
   const completedTextColor = useThemeColor({ light: '#8E8E93', dark: '#8E8E93' }, 'text');
 
   useEffect(() => {
-    // Initialize with empty state - ready for actual task data
-    setTasks([]);
-  }, []);
+    // Get tasks due today whenever categoryLists changes
+    const todayTasks = getTasksDueToday();
+    setTasks(todayTasks);
+  }, [categoryLists, getTasksDueToday]);
 
-  const toggleTaskCompletion = (taskId: string) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId ? { ...task, completed: !task.completed } : task
-      )
+  const handleToggleTaskCompletion = (taskId: string) => {
+    toggleTaskCompletion(taskId);
+  };
+
+  const handleDeleteTask = async (taskId: string, taskTitle: string) => {
+    const isPermanent = await deleteTask(taskId);
+    if (!isPermanent) {
+      // Show snackbar for undo
+      setDeletedTaskId(taskId);
+      setDeletedTaskTitle(taskTitle);
+      setSnackbarVisible(true);
+    }
+  };
+
+  const handleLongPress = (taskId: string, taskTitle: string) => {
+    Alert.alert(
+      'Delete Task',
+      `Are you sure you want to delete "${taskTitle}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleDeleteTask(taskId, taskTitle),
+        },
+      ]
     );
+  };
+
+  const handleUndoDelete = () => {
+    if (deletedTaskId) {
+      restoreTask(deletedTaskId);
+      setSnackbarVisible(false);
+      setDeletedTaskId(null);
+      setDeletedTaskTitle('');
+    }
+  };
+
+  const handleSnackbarDismiss = () => {
+    setSnackbarVisible(false);
+    setDeletedTaskId(null);
+    setDeletedTaskTitle('');
   };
 
   const formatDate = (date: Date) => {
@@ -44,6 +79,11 @@ export default function HomeScreen() {
     });
   };
 
+  const getTaskCategoryColor = (categoryName: string) => {
+    const categoryList = categoryLists.find(cat => cat.category === categoryName);
+    return categoryList?.color || '#8E8E93';
+  };
+
   const renderTaskItem = ({ item }: { item: Task }) => (
     <TouchableOpacity
       style={[
@@ -51,23 +91,50 @@ export default function HomeScreen() {
         { borderColor },
         item.completed && styles.completedTask
       ]}
-      onPress={() => toggleTaskCompletion(item.id)}
+      onPress={() => handleToggleTaskCompletion(item.id)}
+      onLongPress={() => handleLongPress(item.id, item.title)}
+      delayLongPress={600}
     >
       <View style={styles.taskHeader}>
+        <View style={[styles.categoryIndicator, { backgroundColor: getTaskCategoryColor(item.category) }]} />
         <View style={styles.taskInfo}>
-          <ThemedText
-            type="defaultSemiBold"
-            style={[
-              styles.taskTitle,
-              item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
-            ]}
-          >
-            {item.title}
-          </ThemedText>
-          {item.category && (
-            <ThemedText style={styles.categoryTag}>
-              {item.category}
+          <View style={styles.taskTitleRow}>
+            <ThemedText
+              type="defaultSemiBold"
+              style={[
+                styles.taskTitle,
+                item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
+              ]}
+            >
+              {item.title}
             </ThemedText>
+            {item.priority && (
+              <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
+                {item.priority}
+              </ThemedText>
+            )}
+          </View>
+          <ThemedText style={styles.categoryTag}>
+            {item.category}
+          </ThemedText>
+          {item.description && (
+            <ThemedText
+              style={[
+                styles.taskDescription,
+                item.completed && { color: completedTextColor }
+              ]}
+            >
+              {item.description}
+            </ThemedText>
+          )}
+          {item.subtasks && item.subtasks.length > 0 && (
+            <View style={styles.subtasksContainer}>
+              {item.subtasks.map((subtask) => (
+                <ThemedText key={subtask.id} style={styles.subtaskText}>
+                  • {subtask.name}
+                </ThemedText>
+              ))}
+            </View>
           )}
         </View>
         <View style={[
@@ -80,16 +147,6 @@ export default function HomeScreen() {
           )}
         </View>
       </View>
-      {item.description && (
-        <ThemedText
-          style={[
-            styles.taskDescription,
-            item.completed && { color: completedTextColor }
-          ]}
-        >
-          {item.description}
-        </ThemedText>
-      )}
     </TouchableOpacity>
   );
 
@@ -132,6 +189,11 @@ export default function HomeScreen() {
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             Today&apos;s Tasks
           </ThemedText>
+          {tasks.length > 0 && (
+            <ThemedText style={styles.helpText}>
+              Tap to complete • Long press to delete
+            </ThemedText>
+          )}
           
           {tasks.length === 0 ? (
             <ThemedView style={[styles.emptyState, { borderColor }]}>
@@ -159,6 +221,15 @@ export default function HomeScreen() {
             📁 Categories coming soon...
           </ThemedText>
         </View>
+
+        {/* Snackbar */}
+        <Snackbar
+          visible={snackbarVisible}
+          message={`"${deletedTaskTitle}" deleted`}
+          actionText="UNDO"
+          onAction={handleUndoDelete}
+          onDismiss={handleSnackbarDismiss}
+        />
       </ThemedView>
     </SafeAreaView>
   );
@@ -230,22 +301,51 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  categoryIndicator: {
+    width: 4,
+    height: 40,
+    borderRadius: 2,
+    marginRight: 12,
+    alignSelf: 'stretch',
+  },
   taskInfo: {
     flex: 1,
     marginRight: 12,
   },
-  taskTitle: {
+  taskTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
+  },
+  taskTitle: {
+    fontSize: 16,
+    flex: 1,
+  },
+  priorityBadge: {
+    fontSize: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginLeft: 8,
   },
   categoryTag: {
     fontSize: 12,
     opacity: 0.6,
     fontWeight: '500',
+    marginBottom: 4,
   },
   taskDescription: {
     marginTop: 8,
     opacity: 0.8,
     lineHeight: 20,
+  },
+  subtasksContainer: {
+    marginTop: 8,
+  },
+  subtaskText: {
+    fontSize: 14,
+    opacity: 0.8,
+    marginBottom: 4,
   },
   checkbox: {
     width: 24,
@@ -290,5 +390,11 @@ const styles = StyleSheet.create({
   placeholderText: {
     opacity: 0.5,
     fontSize: 14,
+  },
+  helpText: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 12,
+    textAlign: 'center',
   },
 }); 

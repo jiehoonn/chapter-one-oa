@@ -32,6 +32,7 @@ const MAPPING = {
   'calendar': 'event',
   'clock.fill': 'schedule',
   'checkmark.circle.fill': 'check-circle',
+  'trash': 'delete',
 } as IconMapping;
 
 /**

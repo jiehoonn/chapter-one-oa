@@ -3,36 +3,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, FlatList, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Snackbar } from '@/components/Snackbar';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { CategoryList, Priority, Task, useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
-
-type Priority = '!!!' | '!!' | '!';
-
-interface Subtask {
-  id: string;
-  name: string;
-  completed: boolean;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  dueDate: Date;
-  completed: boolean;
-  category: string;
-  priority?: Priority;
-  subtasks?: Subtask[];
-}
-
-interface CategoryList {
-  category: string;
-  tasks: Task[];
-  color: string;
-  icon: IconName;
-}
 
 interface NewListData {
   name: string;
@@ -80,11 +56,14 @@ const PREDEFINED_ICONS = [
 const PRIORITY_OPTIONS: Priority[] = ['!!!', '!!', '!'];
 
 export default function ListsScreen() {
-  const [categoryLists, setCategoryLists] = useState<CategoryList[]>([]);
+  const { categoryLists, addCategoryList, addTask, toggleTaskCompletion, deleteTask, restoreTask } = useTaskContext();
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [deletedTaskId, setDeletedTaskId] = useState<string | null>(null);
+  const [deletedTaskTitle, setDeletedTaskTitle] = useState<string>('');
   const [newListData, setNewListData] = useState<NewListData>({
     name: '',
     color: PREDEFINED_COLORS[0],
@@ -112,9 +91,16 @@ export default function ListsScreen() {
   }>>({});
 
   useEffect(() => {
-    // Initialize with empty state - ready for actual task data
-    setCategoryLists([]);
-  }, []);
+    // Initialize animation values for existing categories
+    categoryLists.forEach(({ category }) => {
+      if (!animationRefs.current[category]) {
+        animationRefs.current[category] = {
+          chevron: new Animated.Value(0),
+          content: new Animated.Value(1)
+        };
+      }
+    });
+  }, [categoryLists]);
 
   const createNewList = () => {
     if (!newListData.name.trim()) {
@@ -122,14 +108,14 @@ export default function ListsScreen() {
       return;
     }
 
-    const newList: CategoryList = {
+    const newList = {
       category: newListData.name.trim(),
       tasks: [],
       color: newListData.color,
       icon: newListData.icon,
     };
 
-    setCategoryLists(prev => [...prev, newList]);
+    addCategoryList(newList);
     
     // Initialize animation values for the new category
     animationRefs.current[newList.category] = {
@@ -166,7 +152,7 @@ export default function ListsScreen() {
       return;
     }
 
-    const newTask: Task = {
+    const newTask = {
       id: Date.now().toString(),
       title: newTaskData.title.trim(),
       description: newTaskData.description.trim() || undefined,
@@ -183,14 +169,7 @@ export default function ListsScreen() {
         })),
     };
 
-    setCategoryLists(prev =>
-      prev.map(categoryList =>
-        categoryList.category === newTaskData.categoryName
-          ? { ...categoryList, tasks: [...categoryList.tasks, newTask] }
-          : categoryList
-      )
-    );
-
+    addTask(newTask);
     setShowDatePicker(false);
     setShowTaskModal(false);
   };
@@ -198,6 +177,49 @@ export default function ListsScreen() {
   const closeTaskModal = () => {
     setShowDatePicker(false);
     setShowTaskModal(false);
+  };
+
+  const handleDeleteTask = async (taskId: string, taskTitle: string) => {
+    const isPermanent = await deleteTask(taskId);
+    if (!isPermanent) {
+      // Show snackbar for undo
+      setDeletedTaskId(taskId);
+      setDeletedTaskTitle(taskTitle);
+      setSnackbarVisible(true);
+    }
+  };
+
+  const handleLongPress = (taskId: string, taskTitle: string) => {
+    Alert.alert(
+      'Delete Task',
+      `Are you sure you want to delete "${taskTitle}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleDeleteTask(taskId, taskTitle),
+        },
+      ]
+    );
+  };
+
+  const handleUndoDelete = () => {
+    if (deletedTaskId) {
+      restoreTask(deletedTaskId);
+      setSnackbarVisible(false);
+      setDeletedTaskId(null);
+      setDeletedTaskTitle('');
+    }
+  };
+
+  const handleSnackbarDismiss = () => {
+    setSnackbarVisible(false);
+    setDeletedTaskId(null);
+    setDeletedTaskTitle('');
   };
 
   const addSubtask = () => {
@@ -229,15 +251,14 @@ export default function ListsScreen() {
     });
   };
 
-  const toggleTaskCompletion = (taskId: string) => {
-    setCategoryLists(prevLists =>
-      prevLists.map(categoryList => ({
-        ...categoryList,
-        tasks: categoryList.tasks.map(task =>
-          task.id === taskId ? { ...task, completed: !task.completed } : task
-        )
-      }))
-    );
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || newTaskData.dueDate;
+    setShowDatePicker(Platform.OS === 'ios');
+    setNewTaskData(prev => ({ ...prev, dueDate: currentDate }));
+  };
+
+  const showDatePickerModal = () => {
+    setShowDatePicker(true);
   };
 
   const toggleCategoryCollapse = (category: string) => {
@@ -296,6 +317,8 @@ export default function ListsScreen() {
         item.completed && styles.completedTask
       ]}
       onPress={() => toggleTaskCompletion(item.id)}
+      onLongPress={() => handleLongPress(item.id, item.title)}
+      delayLongPress={600}
     >
       <View style={styles.taskHeader}>
         <View style={[styles.categoryIndicator, { backgroundColor: categoryColor }]} />
@@ -392,7 +415,7 @@ export default function ListsScreen() {
               />
             </Animated.View>
             <IconSymbol
-              name={item.icon}
+              name={item.icon as any}
               size={20}
               color={item.color}
               style={{ marginRight: 8 }}
@@ -432,6 +455,13 @@ export default function ListsScreen() {
                 {renderTaskItem({ item: task, categoryColor: item.color })}
               </View>
             ))}
+
+            {/* Help text when tasks are present */}
+            {item.tasks.length > 0 && (
+              <ThemedText style={styles.helpText}>
+                Tap to complete • Long press to delete
+              </ThemedText>
+            )}
 
             {/* Add Task Button */}
             <TouchableOpacity
@@ -505,16 +535,6 @@ export default function ListsScreen() {
     acc + cat.tasks.filter(task => task.completed).length, 0
   );
 
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    const currentDate = selectedDate || newTaskData.dueDate;
-    setShowDatePicker(Platform.OS === 'ios');
-    setNewTaskData(prev => ({ ...prev, dueDate: currentDate }));
-  };
-
-  const showDatePickerModal = () => {
-    setShowDatePicker(true);
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <ThemedView style={styles.content}>
@@ -544,6 +564,15 @@ export default function ListsScreen() {
           keyExtractor={(item) => item.category}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.categoriesList}
+        />
+
+        {/* Snackbar */}
+        <Snackbar
+          visible={snackbarVisible}
+          message={`"${deletedTaskTitle}" deleted`}
+          actionText="UNDO"
+          onAction={handleUndoDelete}
+          onDismiss={handleSnackbarDismiss}
         />
 
         {/* Create List Modal */}
@@ -1040,5 +1069,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
     fontWeight: '600',
+  },
+  helpText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 12,
+    textAlign: 'center',
   },
 }); 
