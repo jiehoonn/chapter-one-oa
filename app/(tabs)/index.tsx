@@ -1,23 +1,50 @@
+/**
+ * @fileoverview Home screen displaying today's tasks with completion tracking
+ * Features animated task reordering and progress visualization
+ */
+
 import React, { useEffect, useState } from 'react';
 import { Alert, FlatList, LayoutAnimation, Platform, StyleSheet, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Snackbar } from '@/components/Snackbar';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { Task, useTaskContext } from '@/contexts/TaskContext';
+import { useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { ThemedText } from '@/src/components/common/ThemedText';
+import { ThemedView } from '@/src/components/common/ThemedView';
+import { Snackbar } from '@/src/components/ui/Snackbar';
+import { Task } from '@/src/types';
+import { formatDate } from '@/src/utils';
 
+/**
+ * Home Screen Component
+ * 
+ * Displays today's tasks with the following features:
+ * - Animated task reordering (completed tasks move to bottom)
+ * - Progress tracking with visual indicators
+ * - Task completion toggle functionality
+ * - Task deletion with undo capability
+ * - Responsive design for different screen sizes
+ * 
+ * @returns JSX.Element - The home screen component
+ */
 export default function HomeScreen() {
+  // Task context for accessing global task state and operations
   const { getTasksDueToday, toggleTaskCompletion, deleteTask, restoreTask, categoryLists } = useTaskContext();
+  
+  // Local state for screen-specific functionality
   const [tasks, setTasks] = useState<Task[]>([]);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [deletedTaskId, setDeletedTaskId] = useState<string | null>(null);
   const [deletedTaskTitle, setDeletedTaskTitle] = useState<string>('');
+  
+  // Theme-aware colors
   const borderColor = useThemeColor({ light: '#E5E5E7', dark: '#2C2C2E' }, 'text');
   const completedTextColor = useThemeColor({ light: '#8E8E93', dark: '#8E8E93' }, 'text');
 
-  // Configure layout animations for Android
+  /**
+   * Configure layout animations for Android compatibility
+   * Enables smooth task reordering animations on Android devices
+   */
   useEffect(() => {
     if (Platform.OS === 'android') {
       if (UIManager.setLayoutAnimationEnabledExperimental) {
@@ -26,17 +53,39 @@ export default function HomeScreen() {
     }
   }, []);
 
+  /**
+   * Update tasks when category lists change
+   * Sorts tasks to show incomplete ones first, completed ones at bottom
+   * Within each group, sorts by priority (highest first)
+   */
   useEffect(() => {
     // Get tasks due today whenever categoryLists changes
     const todayTasks = getTasksDueToday();
-    // Sort tasks: incomplete tasks first, completed tasks at the bottom
+    
+    // Sort tasks: incomplete first, then by priority within each group
     const sortedTasks = todayTasks.sort((a, b) => {
-      if (a.completed === b.completed) return 0;
-      return a.completed ? 1 : -1; // Completed tasks go to bottom
+      // First sort by completion status
+      if (a.completed !== b.completed) {
+        return a.completed ? 1 : -1; // Completed tasks go to bottom
+      }
+      
+      // Then sort by priority within the same completion group
+      const priorityOrder = { '!!!': 0, '!!': 1, '!': 2 };
+      const aPriority = a.priority ? priorityOrder[a.priority] : 999; // No priority goes last
+      const bPriority = b.priority ? priorityOrder[b.priority] : 999;
+      
+      return aPriority - bPriority; // Higher priority (lower number) comes first
     });
+    
     setTasks(sortedTasks);
   }, [categoryLists, getTasksDueToday]);
 
+  /**
+   * Handles task completion toggle with smooth animation
+   * Configures layout animation before state change for smooth reordering
+   * 
+   * @param taskId - Unique identifier of the task to toggle
+   */
   const handleToggleTaskCompletion = (taskId: string) => {
     // Configure the layout animation for smooth reordering
     LayoutAnimation.configureNext({
@@ -55,6 +104,12 @@ export default function HomeScreen() {
     toggleTaskCompletion(taskId);
   };
 
+  /**
+   * Handles task deletion with undo functionality
+   * 
+   * @param taskId - Unique identifier of the task to delete
+   * @param taskTitle - Title of the task for display in snackbar
+   */
   const handleDeleteTask = async (taskId: string, taskTitle: string) => {
     const isPermanent = await deleteTask(taskId);
     if (!isPermanent) {
@@ -65,6 +120,12 @@ export default function HomeScreen() {
     }
   };
 
+  /**
+   * Handles long press gesture on tasks to show delete confirmation
+   * 
+   * @param taskId - Unique identifier of the task
+   * @param taskTitle - Title of the task for confirmation dialog
+   */
   const handleLongPress = (taskId: string, taskTitle: string) => {
     Alert.alert(
       'Delete Task',
@@ -83,6 +144,10 @@ export default function HomeScreen() {
     );
   };
 
+  /**
+   * Handles undo action from snackbar
+   * Restores the temporarily deleted task
+   */
   const handleUndoDelete = () => {
     if (deletedTaskId) {
       restoreTask(deletedTaskId);
@@ -92,26 +157,33 @@ export default function HomeScreen() {
     }
   };
 
+  /**
+   * Handles snackbar dismissal
+   * Cleans up temporary delete state
+   */
   const handleSnackbarDismiss = () => {
     setSnackbarVisible(false);
     setDeletedTaskId(null);
     setDeletedTaskTitle('');
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
+  /**
+   * Gets the color for a task's category indicator
+   * 
+   * @param categoryName - Name of the category
+   * @returns Hex color string for the category
+   */
   const getTaskCategoryColor = (categoryName: string) => {
     const categoryList = categoryLists.find(cat => cat.category === categoryName);
     return categoryList?.color || '#8E8E93';
   };
 
+  /**
+   * Renders a single task item in the FlatList
+   * 
+   * @param item - Task object to render
+   * @returns JSX.Element - Rendered task item
+   */
   const renderTaskItem = ({ item }: { item: Task }) => (
     <TouchableOpacity
       style={[
@@ -124,7 +196,9 @@ export default function HomeScreen() {
       delayLongPress={600}
     >
       <View style={styles.taskHeader}>
+        {/* Category color indicator */}
         <View style={[styles.categoryIndicator, { backgroundColor: getTaskCategoryColor(item.category) }]} />
+        
         <View style={styles.taskInfo}>
           <View style={styles.taskTitleRow}>
             <ThemedText
@@ -136,15 +210,20 @@ export default function HomeScreen() {
             >
               {item.title}
             </ThemedText>
+            {/* Priority badge */}
             {item.priority && (
               <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
                 {item.priority}
               </ThemedText>
             )}
           </View>
+          
+          {/* Category tag */}
           <ThemedText style={styles.categoryTag}>
             {item.category}
           </ThemedText>
+          
+          {/* Task description */}
           {item.description && (
             <ThemedText
               style={[
@@ -155,6 +234,8 @@ export default function HomeScreen() {
               {item.description}
             </ThemedText>
           )}
+          
+          {/* Subtasks list */}
           {item.subtasks && item.subtasks.length > 0 && (
             <View style={styles.subtasksContainer}>
               {item.subtasks.map((subtask) => (
@@ -165,6 +246,8 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
+        
+        {/* Completion checkbox */}
         <View style={[
           styles.checkbox,
           { borderColor },
@@ -178,6 +261,7 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
+  // Calculate completion statistics
   const completedCount = tasks.filter(task => task.completed).length;
   const totalCount = tasks.length;
 
@@ -243,7 +327,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Snackbar */}
+        {/* Snackbar for undo functionality */}
         <Snackbar
           visible={snackbarVisible}
           message={`"${deletedTaskTitle}" deleted`}

@@ -1,57 +1,86 @@
+/**
+ * @fileoverview Task Context Provider for global task state management
+ * Provides task CRUD operations, category management, and undo functionality
+ */
+
 import React, { createContext, ReactNode, useContext, useState } from 'react';
 
-export type Priority = '!!!' | '!!' | '!';
+import {
+    CategoryList,
+    DeletedTask,
+    Task,
+    TaskContextType
+} from '@/src/types';
 
-export interface Subtask {
-  id: string;
-  name: string;
-  completed: boolean;
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  dueDate: Date;
-  completed: boolean;
-  category: string;
-  priority?: Priority;
-  subtasks?: Subtask[];
-}
-
-export interface CategoryList {
-  category: string;
-  tasks: Task[];
-  color: string;
-  icon: string;
-}
-
-interface DeletedTask {
-  task: Task;
-  categoryName: string;
-  timeoutId: number;
-}
-
-interface TaskContextType {
-  categoryLists: CategoryList[];
-  addCategoryList: (categoryList: CategoryList) => void;
-  addTask: (task: Task) => void;
-  toggleTaskCompletion: (taskId: string) => void;
-  deleteTask: (taskId: string) => Promise<boolean>;
-  restoreTask: (taskId: string) => void;
-  getTasksDueToday: () => Task[];
-}
-
+/**
+ * React Context for task management state
+ * Undefined when used outside of TaskProvider
+ */
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
-export function TaskProvider({ children }: { children: ReactNode }) {
+/**
+ * Props for the TaskProvider component
+ */
+interface TaskProviderProps {
+  /** Child components that will have access to task context */
+  children: ReactNode;
+}
+
+/**
+ * Task Context Provider component
+ * 
+ * Manages all task-related state and operations including:
+ * - Task CRUD operations (Create, Read, Update, Delete)
+ * - Category list management
+ * - Temporary deletion with undo functionality
+ * - Today's tasks filtering
+ * 
+ * @param props - Provider props containing children
+ * @returns JSX.Element - Context provider wrapping children
+ * 
+ * @example
+ * <TaskProvider>
+ *   <App />
+ * </TaskProvider>
+ */
+export function TaskProvider({ children }: TaskProviderProps) {
+  // Main state: Array of category lists, each containing tasks
   const [categoryLists, setCategoryLists] = useState<CategoryList[]>([]);
+  
+  // Temporary storage for deleted tasks (enables undo functionality)
   const [deletedTasks, setDeletedTasks] = useState<Map<string, DeletedTask>>(new Map());
 
+  /**
+   * Adds a new category list to the application
+   * 
+   * @param categoryList - The new category list to add
+   * 
+   * @example
+   * addCategoryList({
+   *   category: "Work",
+   *   tasks: [],
+   *   color: "#FF0000",
+   *   icon: "briefcase.fill"
+   * });
+   */
   const addCategoryList = (categoryList: CategoryList) => {
     setCategoryLists(prev => [...prev, categoryList]);
   };
 
+  /**
+   * Adds a new task to the specified category
+   * 
+   * @param task - The task to add (must have valid category)
+   * 
+   * @example
+   * addTask({
+   *   id: "123",
+   *   title: "Complete project",
+   *   category: "Work",
+   *   completed: false,
+   *   dueDate: new Date()
+   * });
+   */
   const addTask = (task: Task) => {
     setCategoryLists(prev =>
       prev.map(categoryList =>
@@ -62,6 +91,14 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  /**
+   * Toggles the completion status of a task
+   * 
+   * @param taskId - Unique identifier of the task to toggle
+   * 
+   * @example
+   * toggleTaskCompletion("task-123");
+   */
   const toggleTaskCompletion = (taskId: string) => {
     setCategoryLists(prev =>
       prev.map(categoryList => ({
@@ -73,12 +110,29 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  /**
+   * Deletes a task with undo functionality
+   * 
+   * Implements soft delete pattern:
+   * 1. Removes task from UI immediately
+   * 2. Stores task temporarily for undo capability
+   * 3. Auto-deletes permanently after 5 seconds
+   * 
+   * @param taskId - Unique identifier of the task to delete
+   * @returns Promise<boolean> - true if permanently deleted, false if temporary
+   * 
+   * @example
+   * const isPermanent = await deleteTask("task-123");
+   * if (!isPermanent) {
+   *   // Show undo option to user
+   * }
+   */
   const deleteTask = (taskId: string): Promise<boolean> => {
     return new Promise((resolve) => {
       let deletedTask: Task | null = null;
       let categoryName = '';
 
-      // Remove task from categoryLists and store it temporarily
+      // Remove task from categoryLists and capture it for potential restoration
       setCategoryLists(prev =>
         prev.map(categoryList => {
           const taskIndex = categoryList.tasks.findIndex(task => task.id === taskId);
@@ -95,8 +149,9 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       );
 
       if (deletedTask) {
-        // Set up auto-delete after 5 seconds
+        // Set up auto-delete timer (5 seconds)
         const timeoutId = setTimeout(() => {
+          // Permanently delete: remove from temporary storage
           setDeletedTasks(prev => {
             const newMap = new Map(prev);
             newMap.delete(taskId);
@@ -105,7 +160,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
           resolve(true); // Task permanently deleted
         }, 5000);
 
-        // Store in deleted tasks for potential restoration
+        // Store in temporary deleted tasks for potential restoration
         setDeletedTasks(prev => {
           const newMap = new Map(prev);
           newMap.set(taskId, {
@@ -123,6 +178,14 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  /**
+   * Restores a temporarily deleted task
+   * 
+   * @param taskId - Unique identifier of the task to restore
+   * 
+   * @example
+   * restoreTask("task-123"); // Brings back deleted task
+   */
   const restoreTask = (taskId: string) => {
     const deletedTaskData = deletedTasks.get(taskId);
     if (deletedTaskData) {
@@ -138,7 +201,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         )
       );
 
-      // Remove from deleted tasks
+      // Remove from deleted tasks storage
       setDeletedTasks(prev => {
         const newMap = new Map(prev);
         newMap.delete(taskId);
@@ -147,35 +210,57 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const getTasksDueToday = () => {
+  /**
+   * Retrieves all tasks that are due today
+   * 
+   * @returns Array of tasks with due date matching today's date
+   * 
+   * @example
+   * const todayTasks = getTasksDueToday();
+   * console.log(`You have ${todayTasks.length} tasks due today`);
+   */
+  const getTasksDueToday = (): Task[] => {
     const today = new Date();
     const todayString = today.toDateString();
     
+    // Flatten all tasks from all categories
     const allTasks = categoryLists.flatMap(categoryList => categoryList.tasks);
+    
+    // Filter tasks due today
     return allTasks.filter(task => {
       const taskDate = new Date(task.dueDate);
       return taskDate.toDateString() === todayString;
     });
   };
 
+  // Context value object containing all task operations
+  const contextValue: TaskContextType = {
+    categoryLists,
+    addCategoryList,
+    addTask,
+    toggleTaskCompletion,
+    deleteTask,
+    restoreTask,
+    getTasksDueToday,
+  };
+
   return (
-    <TaskContext.Provider
-      value={{
-        categoryLists,
-        addCategoryList,
-        addTask,
-        toggleTaskCompletion,
-        deleteTask,
-        restoreTask,
-        getTasksDueToday,
-      }}
-    >
+    <TaskContext.Provider value={contextValue}>
       {children}
     </TaskContext.Provider>
   );
 }
 
-export function useTaskContext() {
+/**
+ * Custom hook to access the task context
+ * 
+ * @throws Error if used outside of TaskProvider
+ * @returns TaskContextType - All task management operations and state
+ * 
+ * @example
+ * const { tasks, addTask, deleteTask } = useTaskContext();
+ */
+export function useTaskContext(): TaskContextType {
   const context = useContext(TaskContext);
   if (context === undefined) {
     throw new Error('useTaskContext must be used within a TaskProvider');

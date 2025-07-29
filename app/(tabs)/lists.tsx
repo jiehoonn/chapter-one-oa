@@ -3,12 +3,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, FlatList, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Snackbar } from '@/components/Snackbar';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { CategoryList, Priority, Task, useTaskContext } from '@/contexts/TaskContext';
+import { useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { ThemedText } from '@/src/components/common/ThemedText';
+import { ThemedView } from '@/src/components/common/ThemedView';
+import { Snackbar } from '@/src/components/ui/Snackbar';
+import { CategoryList, Priority, Task } from '@/src/types';
 
 interface NewListData {
   name: string;
@@ -401,7 +402,7 @@ export default function ListsScreen() {
   );
 
   const renderCategorySection = ({ item }: { item: CategoryList }) => {
-    const completedCount = item.tasks.filter(task => task.completed).length;
+    const completedCount = item.tasks.filter((task: Task) => task.completed).length;
     const totalCount = item.tasks.length;
     const isCollapsed = collapsedCategories.has(item.category);
     const animations = animationRefs.current[item.category];
