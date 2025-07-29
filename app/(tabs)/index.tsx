@@ -9,6 +9,8 @@ import { FlatList, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Tex
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TaskGestureHandler } from '@/components/TaskGestureHandler';
+import { WelcomeModal } from '@/components/WelcomeModal';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { ThemedText } from '@/src/components/common/ThemedText';
@@ -42,6 +44,7 @@ export default function HomeScreen() {
   // Edit task modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   
   // Theme-aware colors
@@ -237,12 +240,23 @@ export default function HomeScreen() {
       <ThemedView style={styles.content}>
         {/* Header Section */}
         <View style={styles.header}>
-          <ThemedText type="title" style={styles.title}>
-            Task Manager
-          </ThemedText>
-          <ThemedText style={styles.dateText}>
-            {formatDate(new Date())}
-          </ThemedText>
+          <View style={styles.headerContent}>
+            <ThemedText type="title" style={styles.title}>
+              Task Manager
+            </ThemedText>
+            <ThemedText style={styles.dateText}>
+              {formatDate(new Date())}
+            </ThemedText>
+          </View>
+          
+          {/* Help Button */}
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={() => setShowWelcomeModal(true)}
+            activeOpacity={0.7}
+          >
+            <IconSymbol name="questionmark.circle" size={24} color="#007AFF" />
+          </TouchableOpacity>
         </View>
 
         {/* Progress Section */}
@@ -470,6 +484,12 @@ export default function HomeScreen() {
             </SafeAreaView>
           </Modal>
         )}
+
+        {/* Welcome Modal for help */}
+        <WelcomeModal
+          visible={showWelcomeModal}
+          onClose={() => setShowWelcomeModal(false)}
+        />
       </ThemedView>
     </SafeAreaView>
   );
@@ -485,7 +505,17 @@ const styles = StyleSheet.create({
     paddingBottom: 100, // Extra padding for tab bar
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 24,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  helpButton: {
+    padding: 8,
+    marginTop: -8,
   },
   title: {
     marginBottom: 8,

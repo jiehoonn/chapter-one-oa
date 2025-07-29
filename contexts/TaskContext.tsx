@@ -6,10 +6,10 @@
 import React, { createContext, ReactNode, useContext, useState } from 'react';
 
 import {
-    CategoryList,
-    DeletedTask,
-    Task,
-    TaskContextType
+  CategoryList,
+  DeletedTask,
+  Task,
+  TaskContextType
 } from '@/src/types';
 
 /**
@@ -235,6 +235,20 @@ export function TaskProvider({ children }: TaskProviderProps) {
   };
 
   /**
+   * Deletes an entire category list and all its tasks
+   * 
+   * @param categoryName - Name of the category to delete
+   * 
+   * @example
+   * deleteCategoryList("Work"); // Removes entire Work category and all its tasks
+   */
+  const deleteCategoryList = (categoryName: string) => {
+    setCategoryLists(prev =>
+      prev.filter(categoryList => categoryList.category !== categoryName)
+    );
+  };
+
+  /**
    * Retrieves all tasks that are due today
    * 
    * @returns Array of tasks with due date matching today's date
@@ -267,6 +281,7 @@ export function TaskProvider({ children }: TaskProviderProps) {
     deleteTask,
     restoreTask,
     getTasksDueToday,
+    deleteCategoryList,
   };
 
   return (

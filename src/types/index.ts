@@ -91,6 +91,8 @@ export interface TaskContextType {
   restoreTask: (taskId: string) => void;
   /** Function to get all tasks due today */
   getTasksDueToday: () => Task[];
+  /** Function to delete an entire category list and all its tasks */
+  deleteCategoryList: (categoryName: string) => void;
 }
 
 /**

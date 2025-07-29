@@ -1,9 +1,11 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, FlatList, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TaskGestureHandler } from '@/components/TaskGestureHandler';
+import { WelcomeModal } from '@/components/WelcomeModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
@@ -58,11 +60,12 @@ const PREDEFINED_ICONS = [
 const PRIORITY_OPTIONS: Priority[] = ['!!!', '!!', '!'];
 
 export default function ListsScreen() {
-  const { categoryLists, addCategoryList, addTask, toggleTaskCompletion, updateTask, deleteTask, restoreTask } = useTaskContext();
+  const { categoryLists, addCategoryList, addTask, toggleTaskCompletion, updateTask, deleteTask, restoreTask, deleteCategoryList } = useTaskContext();
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
@@ -260,6 +263,41 @@ export default function ListsScreen() {
     }
   };
 
+  /**
+   * Handles long press on category header to delete entire list
+   * Shows confirmation dialog before deletion
+   * 
+   * @param categoryName - Name of the category to delete
+   * @param taskCount - Number of tasks in the category
+   */
+  const handleDeleteCategoryList = (categoryName: string, taskCount: number) => {
+    // Provide haptic feedback for long press
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    const taskText = taskCount === 1 ? 'task' : 'tasks';
+    const message = taskCount > 0 
+      ? `This will permanently delete "${categoryName}" and all ${taskCount} ${taskText} in it.`
+      : `This will permanently delete the "${categoryName}" list.`;
+
+    Alert.alert(
+      'Delete List',
+      message,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteCategoryList(categoryName),
+        },
+      ]
+    );
+  };
+
   const addSubtask = () => {
     setNewTaskData(prev => ({
       ...prev,
@@ -404,6 +442,8 @@ export default function ListsScreen() {
         <TouchableOpacity 
           style={styles.categoryHeader}
           onPress={() => toggleCategoryCollapse(item.category)}
+          onLongPress={() => handleDeleteCategoryList(item.category, item.tasks.length)}
+          delayLongPress={800}
           activeOpacity={0.7}
         >
           <View style={styles.categoryTitleRow}>
@@ -468,12 +508,12 @@ export default function ListsScreen() {
               </ThemedText>
             )}
 
-            {/* Add Task Button */}
+            {/* Add Task Button - Smaller and more subtle */}
             <TouchableOpacity
-              style={[styles.addTaskButton, { borderColor }]}
+              style={[styles.addTaskButton, { borderColor: borderColor + '50' }]} // 50% opacity for subtlety
               onPress={() => openTaskModal(item.category)}
             >
-              <IconSymbol name="plus" size={16} color={borderColor} />
+              <IconSymbol name="plus" size={14} color={borderColor} />
               <ThemedText style={styles.addTaskButtonText}>Add Task</ThemedText>
             </TouchableOpacity>
           </Animated.View>
@@ -545,22 +585,24 @@ export default function ListsScreen() {
       <ThemedView style={styles.content}>
         {/* Header Section */}
         <View style={styles.header}>
-          <ThemedText type="title" style={styles.title}>
-            My Lists
-          </ThemedText>
-          <ThemedText style={styles.subtitle}>
-            {totalCompleted}/{totalTasks} tasks completed
-          </ThemedText>
+          <View style={styles.headerContent}>
+            <ThemedText type="title" style={styles.title}>
+              My Lists
+            </ThemedText>
+            <ThemedText style={styles.subtitle}>
+              {totalCompleted}/{totalTasks} tasks completed
+            </ThemedText>
+          </View>
+          
+          {/* Help Button */}
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={() => setShowWelcomeModal(true)}
+            activeOpacity={0.7}
+          >
+            <IconSymbol name="questionmark.circle" size={24} color="#007AFF" />
+          </TouchableOpacity>
         </View>
-
-        {/* Create New List Button */}
-        <TouchableOpacity
-          style={[styles.createButton, { borderColor }]}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <IconSymbol name="plus" size={20} color={borderColor} />
-          <ThemedText style={styles.createButtonText}>Create New List</ThemedText>
-        </TouchableOpacity>
 
         {/* Categories List */}
         <FlatList
@@ -570,6 +612,24 @@ export default function ListsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.categoriesList}
         />
+
+        {/* Create New List Button - Moved to bottom */}
+        <TouchableOpacity
+          style={[styles.createListButton, { borderColor }]}
+          onPress={() => setShowCreateModal(true)}
+        >
+          <View style={styles.createListButtonContent}>
+            <IconSymbol name="plus.circle.fill" size={24} color="#FFFFFF" />
+            <ThemedText style={styles.createListButtonText}>Create New List</ThemedText>
+          </View>
+        </TouchableOpacity>
+
+        {/* Help text for list management */}
+        {categoryLists.length > 0 && (
+          <ThemedText style={styles.helpText}>
+            Tap to expand/collapse • Hold to delete list
+          </ThemedText>
+        )}
 
         {/* Snackbar */}
         <Snackbar
@@ -924,6 +984,12 @@ export default function ListsScreen() {
             </SafeAreaView>
           </Modal>
         )}
+
+        {/* Welcome Modal for help */}
+        <WelcomeModal
+          visible={showWelcomeModal}
+          onClose={() => setShowWelcomeModal(false)}
+        />
       </ThemedView>
     </SafeAreaView>
   );
@@ -939,7 +1005,17 @@ const styles = StyleSheet.create({
     paddingBottom: 100, // Extra padding for tab bar
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 24,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  helpButton: {
+    padding: 8,
+    marginTop: -8,
   },
   title: {
     marginBottom: 4,
@@ -949,7 +1025,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   categoriesList: {
-    paddingBottom: 20,
+    paddingBottom: 10, // Reduced since Create New List button is now below
   },
   categorySection: {
     marginBottom: 32,
@@ -1081,6 +1157,32 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
     fontWeight: '600',
+  },
+  createListButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    marginTop: 20,
+    marginBottom: 10,
+    backgroundColor: '#007AFF',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  createListButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createListButtonText: {
+    marginLeft: 8,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   modalContainer: {
     flex: 1,
@@ -1235,16 +1337,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
     borderWidth: 1,
+    backgroundColor: 'transparent',
   },
   addTaskButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '600',
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
   },
   helpText: {
     fontSize: 12,
