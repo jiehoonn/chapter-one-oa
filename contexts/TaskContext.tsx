@@ -111,6 +111,30 @@ export function TaskProvider({ children }: TaskProviderProps) {
   };
 
   /**
+   * Updates an existing task with new data
+   * 
+   * @param taskId - Unique identifier of the task to update
+   * @param updates - Partial task object with fields to update
+   * 
+   * @example
+   * updateTask("task-123", { 
+   *   title: "Updated title",
+   *   description: "New description",
+   *   priority: "!!!"
+   * });
+   */
+  const updateTask = (taskId: string, updates: Partial<Omit<Task, 'id'>>) => {
+    setCategoryLists(prev =>
+      prev.map(categoryList => ({
+        ...categoryList,
+        tasks: categoryList.tasks.map(task =>
+          task.id === taskId ? { ...task, ...updates } : task
+        )
+      }))
+    );
+  };
+
+  /**
    * Deletes a task with undo functionality
    * 
    * Implements soft delete pattern:
@@ -211,20 +235,6 @@ export function TaskProvider({ children }: TaskProviderProps) {
   };
 
   /**
-   * Deletes an entire category list and all its tasks
-   * 
-   * @param categoryName - Name of the category to delete
-   * 
-   * @example
-   * deleteCategoryList("Work"); // Removes entire Work category and all its tasks
-   */
-  const deleteCategoryList = (categoryName: string) => {
-    setCategoryLists(prev =>
-      prev.filter(categoryList => categoryList.category !== categoryName)
-    );
-  };
-
-  /**
    * Retrieves all tasks that are due today
    * 
    * @returns Array of tasks with due date matching today's date
@@ -253,10 +263,10 @@ export function TaskProvider({ children }: TaskProviderProps) {
     addCategoryList,
     addTask,
     toggleTaskCompletion,
+    updateTask,
     deleteTask,
     restoreTask,
     getTasksDueToday,
-    deleteCategoryList,
   };
 
   return (

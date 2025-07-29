@@ -79,12 +79,12 @@ export interface TaskContextType {
   categoryLists: CategoryList[];
   /** Function to add a new category list */
   addCategoryList: (categoryList: CategoryList) => void;
-  /** Function to delete an entire category list and all its tasks */
-  deleteCategoryList: (categoryName: string) => void;
   /** Function to add a new task to a category */
   addTask: (task: Task) => void;
   /** Function to toggle task completion status */
   toggleTaskCompletion: (taskId: string) => void;
+  /** Function to update an existing task */
+  updateTask: (taskId: string, updates: Partial<Omit<Task, 'id'>>) => void;
   /** Function to delete a task (returns true if permanent, false if temporary) */
   deleteTask: (taskId: string) => Promise<boolean>;
   /** Function to restore a temporarily deleted task */

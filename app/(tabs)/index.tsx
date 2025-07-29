@@ -3,17 +3,18 @@
  * Features animated task reordering and progress visualization
  */
 
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useState } from 'react';
-import { FlatList, LayoutAnimation, Platform, StyleSheet, TouchableOpacity, UIManager, View } from 'react-native';
+import { FlatList, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { SwipeToDelete } from '@/components/SwipeToDelete';
+import { TaskGestureHandler } from '@/components/TaskGestureHandler';
 import { useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { ThemedText } from '@/src/components/common/ThemedText';
 import { ThemedView } from '@/src/components/common/ThemedView';
 import { Snackbar } from '@/src/components/ui/Snackbar';
-import { Task } from '@/src/types';
+import { Priority, Task } from '@/src/types';
 import { formatDate } from '@/src/utils';
 
 /**
@@ -30,7 +31,7 @@ import { formatDate } from '@/src/utils';
  */
 export default function HomeScreen() {
   // Task context for accessing global task state and operations
-  const { getTasksDueToday, toggleTaskCompletion, deleteTask, restoreTask, categoryLists } = useTaskContext();
+  const { getTasksDueToday, toggleTaskCompletion, updateTask, deleteTask, restoreTask, categoryLists } = useTaskContext();
   
   // Local state for screen-specific functionality
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -38,9 +39,16 @@ export default function HomeScreen() {
   const [deletedTaskId, setDeletedTaskId] = useState<string | null>(null);
   const [deletedTaskTitle, setDeletedTaskTitle] = useState<string>('');
   
+  // Edit task modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  
   // Theme-aware colors
   const borderColor = useThemeColor({ light: '#E5E5E7', dark: '#2C2C2E' }, 'text');
-  const completedTextColor = useThemeColor({ light: '#8E8E93', dark: '#8E8E93' }, 'text');
+  const backgroundColor = useThemeColor({}, 'background');
+  const inputBackgroundColor = useThemeColor({ light: '#F2F2F7', dark: '#2C2C2E' }, 'background');
+  const textColor = useThemeColor({}, 'text');
 
   /**
    * Configure layout animations for Android compatibility
@@ -146,6 +154,53 @@ export default function HomeScreen() {
   };
 
   /**
+   * Handles opening the edit modal for a task
+   * 
+   * @param task - Task to edit
+   */
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setShowEditModal(true);
+  };
+
+  /**
+   * Handles saving edited task
+   */
+  const handleSaveEdit = () => {
+    if (editingTask) {
+      updateTask(editingTask.id, {
+        title: editingTask.title,
+        description: editingTask.description,
+        dueDate: editingTask.dueDate,
+        priority: editingTask.priority,
+        subtasks: editingTask.subtasks,
+      });
+      setShowEditModal(false);
+      setEditingTask(null);
+    }
+  };
+
+  /**
+   * Handles canceling edit
+   */
+  const handleCancelEdit = () => {
+    setShowEditModal(false);
+    setEditingTask(null);
+    setShowDatePicker(false);
+  };
+
+  /**
+   * Handles date change in edit modal
+   */
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || editingTask?.dueDate || new Date();
+    setShowDatePicker(Platform.OS === 'ios');
+    if (editingTask) {
+      setEditingTask({ ...editingTask, dueDate: currentDate });
+    }
+  };
+
+  /**
    * Gets the color for a task's category indicator
    * 
    * @param categoryName - Name of the category
@@ -157,90 +212,20 @@ export default function HomeScreen() {
   };
 
   /**
-   * Renders a single task item in the FlatList with swipe-to-delete functionality
+   * Renders a single task item with gesture handling
    * 
    * @param item - Task object to render
-   * @returns JSX.Element - Rendered task item wrapped in SwipeToDelete
+   * @returns JSX.Element - Rendered task item with edit, completion, and delete functionality
    */
   const renderTaskItem = ({ item }: { item: Task }) => (
-    <SwipeToDelete
-      onDelete={() => handleDeleteTask(item.id, item.title)}
-      disabled={item.completed} // Disable swipe for completed tasks to prevent accidental deletion
-    >
-      <TouchableOpacity
-        style={[
-          styles.taskCard,
-          { borderColor },
-          item.completed && styles.completedTask
-        ]}
-        onPress={() => handleToggleTaskCompletion(item.id)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.taskHeader}>
-          {/* Category color indicator */}
-          <View style={[styles.categoryIndicator, { backgroundColor: getTaskCategoryColor(item.category) }]} />
-          
-          <View style={styles.taskInfo}>
-            <View style={styles.taskTitleRow}>
-              <ThemedText
-                type="defaultSemiBold"
-                style={[
-                  styles.taskTitle,
-                  item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
-                ]}
-              >
-                {item.title}
-              </ThemedText>
-              {/* Priority badge */}
-              {item.priority && (
-                <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
-                  {item.priority}
-                </ThemedText>
-              )}
-            </View>
-            
-            {/* Category tag */}
-            <ThemedText style={styles.categoryTag}>
-              {item.category}
-            </ThemedText>
-            
-            {/* Task description */}
-            {item.description && (
-              <ThemedText
-                style={[
-                  styles.taskDescription,
-                  item.completed && { color: completedTextColor }
-                ]}
-              >
-                {item.description}
-              </ThemedText>
-            )}
-            
-            {/* Subtasks list */}
-            {item.subtasks && item.subtasks.length > 0 && (
-              <View style={styles.subtasksContainer}>
-                {item.subtasks.map((subtask) => (
-                  <ThemedText key={subtask.id} style={styles.subtaskText}>
-                    • {subtask.name}
-                  </ThemedText>
-                ))}
-              </View>
-            )}
-          </View>
-          
-          {/* Completion checkbox */}
-          <View style={[
-            styles.checkbox,
-            { borderColor },
-            item.completed && styles.checkedBox
-          ]}>
-            {item.completed && (
-              <ThemedText style={styles.checkmark}>✓</ThemedText>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    </SwipeToDelete>
+    <TaskGestureHandler
+      task={item}
+      categoryColor={getTaskCategoryColor(item.category)}
+      onEdit={handleEditTask}
+      onToggleCompletion={handleToggleTaskCompletion}
+      onDelete={handleDeleteTask}
+      showCategoryName={true} // Show category name on home page
+    />
   );
 
   // Calculate completion statistics
@@ -285,7 +270,7 @@ export default function HomeScreen() {
           </ThemedText>
           {tasks.length > 0 && (
             <ThemedText style={styles.helpText}>
-              Tap to complete • Swipe left to delete
+              Tap to edit • Tap ✓ to complete • Swipe left to delete
             </ThemedText>
           )}
           
@@ -317,6 +302,174 @@ export default function HomeScreen() {
           onAction={handleUndoDelete}
           onDismiss={handleSnackbarDismiss}
         />
+
+        {/* Edit Task Modal */}
+        {showEditModal && editingTask && (
+          <Modal
+            visible={showEditModal}
+            animationType="slide"
+            presentationStyle="pageSheet"
+          >
+            <SafeAreaView style={[styles.modalContainer, { backgroundColor }]}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={handleCancelEdit}>
+                  <ThemedText style={styles.modalCancelText}>Cancel</ThemedText>
+                </TouchableOpacity>
+                <ThemedText type="subtitle">Edit Task</ThemedText>
+                <TouchableOpacity onPress={handleSaveEdit}>
+                  <ThemedText style={[styles.modalSaveText, { color: '#007AFF' }]}>
+                    Save
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalContent}>
+                {/* Task Title */}
+                <View style={styles.inputSection}>
+                  <ThemedText style={styles.sectionLabel}>Task Name</ThemedText>
+                  <TextInput
+                    style={[styles.textInput, { 
+                      backgroundColor: inputBackgroundColor,
+                      borderColor,
+                      color: textColor
+                    }]}
+                    value={editingTask.title}
+                    onChangeText={(text) => setEditingTask({ ...editingTask, title: text })}
+                    placeholder="Enter task name"
+                    placeholderTextColor={borderColor}
+                  />
+                </View>
+
+                {/* Task Description */}
+                <View style={styles.inputSection}>
+                  <ThemedText style={styles.sectionLabel}>Description (Optional)</ThemedText>
+                  <TextInput
+                    style={[styles.textArea, { 
+                      backgroundColor: inputBackgroundColor,
+                      borderColor,
+                      color: textColor
+                    }]}
+                    value={editingTask.description || ''}
+                    onChangeText={(text) => setEditingTask({ ...editingTask, description: text })}
+                    placeholder="Enter task description"
+                    placeholderTextColor={borderColor}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                {/* Due Date */}
+                <View style={styles.inputSection}>
+                  <ThemedText style={styles.sectionLabel}>Due Date</ThemedText>
+                  <TouchableOpacity
+                    style={[styles.dateButton, { 
+                      backgroundColor: inputBackgroundColor,
+                      borderColor 
+                    }]}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <ThemedText>
+                      {formatDate(editingTask.dueDate)}
+                    </ThemedText>
+                  </TouchableOpacity>
+                  
+                  {showDatePicker && (
+                    <DateTimePicker
+                      testID="dateTimePicker"
+                      value={editingTask.dueDate}
+                      mode="date"
+                      is24Hour={true}
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={handleDateChange}
+                      minimumDate={new Date()}
+                    />
+                  )}
+                </View>
+
+                {/* Priority */}
+                <View style={styles.inputSection}>
+                  <ThemedText style={styles.sectionLabel}>Priority (Optional)</ThemedText>
+                  <View style={styles.priorityGrid}>
+                    {(['!!!', '!!', '!'] as Priority[]).map((priority) => (
+                      <TouchableOpacity
+                        key={priority}
+                        style={[
+                          styles.priorityOption,
+                          { borderColor },
+                          editingTask.priority === priority && { backgroundColor: '#FF3B30' }
+                        ]}
+                        onPress={() => setEditingTask({ 
+                          ...editingTask, 
+                          priority: editingTask.priority === priority ? undefined : priority 
+                        })}
+                      >
+                        <ThemedText
+                          style={[
+                            styles.priorityText,
+                            editingTask.priority === priority && { color: '#FFFFFF' }
+                          ]}
+                        >
+                          {priority}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Subtasks */}
+                <View style={styles.inputSection}>
+                  <View style={styles.subtaskHeader}>
+                    <ThemedText style={styles.sectionLabel}>Subtasks (Optional)</ThemedText>
+                    <TouchableOpacity
+                      style={styles.addSubtaskButton}
+                      onPress={() => {
+                        const currentSubtasks = editingTask.subtasks || [];
+                        setEditingTask({
+                          ...editingTask,
+                          subtasks: [...currentSubtasks, { id: Date.now().toString(), name: '', completed: false }]
+                        });
+                      }}
+                    >
+                      <ThemedText style={{ color: '#007AFF', fontSize: 16 }}>+ Add</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                  {editingTask.subtasks && editingTask.subtasks.length > 0 && (
+                    <View>
+                      {editingTask.subtasks.map((subtask, index) => (
+                        <View key={subtask.id} style={styles.subtaskRow}>
+                          <TextInput
+                            style={[styles.subtaskInput, {
+                              backgroundColor: inputBackgroundColor,
+                              borderColor,
+                              color: textColor
+                            }]}
+                            value={subtask.name}
+                            onChangeText={(text) => {
+                              const updatedSubtasks = [...(editingTask.subtasks || [])];
+                              updatedSubtasks[index] = { ...updatedSubtasks[index], name: text };
+                              setEditingTask({ ...editingTask, subtasks: updatedSubtasks });
+                            }}
+                            placeholder={`Subtask ${index + 1}`}
+                            placeholderTextColor={borderColor}
+                          />
+                          <TouchableOpacity
+                            style={styles.removeSubtaskButton}
+                            onPress={() => {
+                              const updatedSubtasks = (editingTask.subtasks || []).filter((_, i) => i !== index);
+                              setEditingTask({ ...editingTask, subtasks: updatedSubtasks });
+                            }}
+                          >
+                            <ThemedText style={{ color: '#FF3B30', fontSize: 16 }}>✕</ThemedText>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
+            </SafeAreaView>
+          </Modal>
+        )}
       </ThemedView>
     </SafeAreaView>
   );
@@ -475,5 +628,101 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     marginBottom: 12,
     textAlign: 'center',
+  },
+  
+  // Modal styles for edit task functionality
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E7',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: '#007AFF',
+  },
+  modalSaveText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  inputSection: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  textInput: {
+    fontSize: 16,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  textArea: {
+    fontSize: 16,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    textAlignVertical: 'top',
+  },
+  dateButton: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  priorityGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  priorityOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  priorityText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // Subtask editing styles
+  subtaskHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addSubtaskButton: {
+    padding: 8,
+  },
+  subtaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  subtaskInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  removeSubtaskButton: {
+    padding: 8,
   },
 }); 
