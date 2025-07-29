@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Task gesture handler component for interactive task management
+ * Wraps task items with gesture handling capabilities including tap to edit,
+ * checkbox toggle, and swipe to delete functionality
+ */
+
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 

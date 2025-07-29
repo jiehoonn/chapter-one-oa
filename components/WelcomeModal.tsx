@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Welcome modal component for first-time user onboarding
+ * Displays comprehensive app instructions, gesture guides, and feature explanations
+ * to help new users understand how to use the task manager effectively
+ */
+
 import React from 'react';
 import { Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
