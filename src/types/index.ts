@@ -79,6 +79,8 @@ export interface TaskContextType {
   categoryLists: CategoryList[];
   /** Function to add a new category list */
   addCategoryList: (categoryList: CategoryList) => void;
+  /** Function to delete an entire category list and all its tasks */
+  deleteCategoryList: (categoryName: string) => void;
   /** Function to add a new task to a category */
   addTask: (task: Task) => void;
   /** Function to toggle task completion status */

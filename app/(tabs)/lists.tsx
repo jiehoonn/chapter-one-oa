@@ -1,4 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, FlatList, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -58,7 +59,7 @@ const PREDEFINED_ICONS = [
 const PRIORITY_OPTIONS: Priority[] = ['!!!', '!!', '!'];
 
 export default function ListsScreen() {
-  const { categoryLists, addCategoryList, addTask, toggleTaskCompletion, deleteTask, restoreTask } = useTaskContext();
+  const { categoryLists, addCategoryList, addTask, toggleTaskCompletion, deleteTask, restoreTask, deleteCategoryList } = useTaskContext();
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -213,6 +214,41 @@ export default function ListsScreen() {
     setSnackbarVisible(false);
     setDeletedTaskId(null);
     setDeletedTaskTitle('');
+  };
+
+  /**
+   * Handles long press on category header to delete entire list
+   * Shows confirmation dialog before deletion
+   * 
+   * @param categoryName - Name of the category to delete
+   * @param taskCount - Number of tasks in the category
+   */
+  const handleDeleteCategoryList = (categoryName: string, taskCount: number) => {
+    // Provide haptic feedback for long press
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    const taskText = taskCount === 1 ? 'task' : 'tasks';
+    const message = taskCount > 0 
+      ? `This will permanently delete "${categoryName}" and all ${taskCount} ${taskText} in it.`
+      : `This will permanently delete the "${categoryName}" list.`;
+
+    Alert.alert(
+      'Delete List',
+      message,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteCategoryList(categoryName),
+        },
+      ]
+    );
   };
 
   const addSubtask = () => {
@@ -418,6 +454,8 @@ export default function ListsScreen() {
         <TouchableOpacity 
           style={styles.categoryHeader}
           onPress={() => toggleCategoryCollapse(item.category)}
+          onLongPress={() => handleDeleteCategoryList(item.category, item.tasks.length)}
+          delayLongPress={800}
           activeOpacity={0.7}
         >
           <View style={styles.categoryTitleRow}>
@@ -575,6 +613,13 @@ export default function ListsScreen() {
           <IconSymbol name="plus" size={20} color={borderColor} />
           <ThemedText style={styles.createButtonText}>Create New List</ThemedText>
         </TouchableOpacity>
+
+        {/* Help text for list management */}
+        {categoryLists.length > 0 && (
+          <ThemedText style={styles.listHelpText}>
+            Tap to expand/collapse • Hold to delete list
+          </ThemedText>
+        )}
 
         {/* Categories List */}
         <FlatList
@@ -1093,6 +1138,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.6,
     marginTop: 12,
+    textAlign: 'center',
+  },
+  listHelpText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginBottom: 16,
     textAlign: 'center',
   },
 }); 
