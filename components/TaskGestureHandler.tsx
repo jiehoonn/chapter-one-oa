@@ -167,17 +167,21 @@ const styles = StyleSheet.create({
   taskHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    position: 'relative',
   },
   categoryIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
     width: 4,
-    height: 40,
-    borderRadius: 2,
-    alignSelf: 'stretch',
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
   },
   taskContent: {
     flex: 1,
     padding: 16,
-    paddingLeft: 12, // Reduce left padding since category indicator provides spacing
+    paddingLeft: 20, // Increased to account for the 4px indicator + some spacing
   },
   taskInfo: {
     flex: 1,
