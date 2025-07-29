@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, FlatList, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { SwipeToDelete } from '@/components/SwipeToDelete';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
@@ -199,24 +200,6 @@ export default function ListsScreen() {
     }
   };
 
-  const handleLongPress = (taskId: string, taskTitle: string) => {
-    Alert.alert(
-      'Delete Task',
-      `Are you sure you want to delete "${taskTitle}"?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => handleDeleteTask(taskId, taskTitle),
-        },
-      ]
-    );
-  };
-
   const handleUndoDelete = () => {
     if (deletedTaskId) {
       restoreTask(deletedTaskId);
@@ -320,85 +303,89 @@ export default function ListsScreen() {
   };
 
   const renderTaskItem = ({ item, categoryColor }: { item: Task; categoryColor: string }) => (
-    <TouchableOpacity
-      style={[
-        styles.taskCard,
-        { borderColor },
-        item.completed && styles.completedTask
-      ]}
-      onPress={() => {
-        // Configure the layout animation for smooth reordering
-        LayoutAnimation.configureNext({
-          duration: 300,
-          create: {
-            type: LayoutAnimation.Types.easeInEaseOut,
-            property: LayoutAnimation.Properties.opacity,
-          },
-          update: {
-            type: LayoutAnimation.Types.easeInEaseOut,
-            property: LayoutAnimation.Properties.scaleXY,
-            springDamping: 0.7,
-          },
-        });
-        
-        toggleTaskCompletion(item.id);
-      }}
-      onLongPress={() => handleLongPress(item.id, item.title)}
-      delayLongPress={600}
+    <SwipeToDelete
+      onDelete={() => handleDeleteTask(item.id, item.title)}
+      disabled={item.completed} // Disable swipe for completed tasks
     >
-      <View style={styles.taskHeader}>
-        <View style={[styles.categoryIndicator, { backgroundColor: categoryColor }]} />
-        <View style={styles.taskInfo}>
-          <View style={styles.taskTitleRow}>
-            <ThemedText
-              type="defaultSemiBold"
-              style={[
-                styles.taskTitle,
-                item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
-              ]}
-            >
-              {item.title}
-            </ThemedText>
-            {item.priority && (
-              <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
-                {item.priority}
+      <TouchableOpacity
+        style={[
+          styles.taskCard,
+          { borderColor },
+          item.completed && styles.completedTask
+        ]}
+        onPress={() => {
+          // Configure the layout animation for smooth reordering
+          LayoutAnimation.configureNext({
+            duration: 300,
+            create: {
+              type: LayoutAnimation.Types.easeInEaseOut,
+              property: LayoutAnimation.Properties.opacity,
+            },
+            update: {
+              type: LayoutAnimation.Types.easeInEaseOut,
+              property: LayoutAnimation.Properties.scaleXY,
+              springDamping: 0.7,
+            },
+          });
+          
+          toggleTaskCompletion(item.id);
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={styles.taskHeader}>
+          <View style={[styles.categoryIndicator, { backgroundColor: categoryColor }]} />
+          <View style={styles.taskInfo}>
+            <View style={styles.taskTitleRow}>
+              <ThemedText
+                type="defaultSemiBold"
+                style={[
+                  styles.taskTitle,
+                  item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
+                ]}
+              >
+                {item.title}
+              </ThemedText>
+              {item.priority && (
+                <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
+                  {item.priority}
+                </ThemedText>
+              )}
+            </View>
+            {item.description && (
+              <ThemedText
+                style={[
+                  styles.taskDescription,
+                  item.completed && { color: completedTextColor }
+                ]}
+              >
+                {item.description}
               </ThemedText>
             )}
-          </View>
-          {item.description && (
-            <ThemedText
-              style={[
-                styles.taskDescription,
-                item.completed && { color: completedTextColor }
-              ]}
-            >
-              {item.description}
+            <ThemedText style={styles.dueDateText}>
+              Due: {formatDate(item.dueDate)}
             </ThemedText>
-          )}
-          <ThemedText style={styles.dueDateText}>
-            Due: {formatDate(item.dueDate)}
-          </ThemedText>
-          {item.subtasks && item.subtasks.length > 0 && (
-            <View style={styles.subtasksContainer}>
-              {item.subtasks.map((subtask) => (
-                <ThemedText key={subtask.id} style={styles.subtaskText}>
-                  • {subtask.name}
-                </ThemedText>
-              ))}
-            </View>
-          )}
+            {item.subtasks && item.subtasks.length > 0 && (
+              <View style={styles.subtasksContainer}>
+                {item.subtasks.map((subtask) => (
+                  <ThemedText key={subtask.id} style={styles.subtaskText}>
+                    • {subtask.name}
+                  </ThemedText>
+                ))}
+              </View>
+            )}
+          </View>
+          <View style={[
+            styles.checkbox,
+            { borderColor },
+            item.completed && styles.checkedBox
+          ]}>
+            {item.completed && (
+              <ThemedText style={styles.checkmark}>✓</ThemedText>
+            )}
+          </View>
         </View>
-        <View style={[
-          styles.checkbox,
-          { borderColor },
-          item.completed && styles.checkedBox
-        ]}>
-          {item.completed && (
-            <ThemedText style={styles.checkmark}>✓</ThemedText>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </SwipeToDelete>
   );
 
   const renderCategorySection = ({ item }: { item: CategoryList }) => {
@@ -491,7 +478,7 @@ export default function ListsScreen() {
             {/* Help text when tasks are present */}
             {item.tasks.length > 0 && (
               <ThemedText style={styles.helpText}>
-                Tap to complete • Long press to delete
+                Tap to complete • Swipe to delete
               </ThemedText>
             )}
 

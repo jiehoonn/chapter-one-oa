@@ -3,7 +3,7 @@
  * A material design inspired notification component with fade in/out animations
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { useThemeColor } from '@/hooks/useThemeColor';
@@ -42,7 +42,7 @@ export function Snackbar({
   duration = 5000
 }: SnackbarProps) {
   // Animation value for fade in/out effect
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   
   // Internal visibility state to handle animation timing
   const [isVisible, setIsVisible] = useState(false);
@@ -51,21 +51,6 @@ export function Snackbar({
   const backgroundColor = useThemeColor({ light: '#323232', dark: '#E0E0E0' }, 'text');
   const textColor = useThemeColor({ light: '#FFFFFF', dark: '#000000' }, 'background');
   const actionColor = useThemeColor({ light: '#03DAC6', dark: '#03DAC6' }, 'text');
-
-  /**
-   * Handles snackbar dismissal with fade out animation
-   * Calls onDismiss callback after animation completes
-   */
-  const handleDismiss = useCallback(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setIsVisible(false);
-      onDismiss();
-    });
-  }, [fadeAnim, onDismiss]);
 
   /**
    * Handle visibility changes and animations
@@ -84,24 +69,44 @@ export function Snackbar({
 
       // Auto-dismiss timer
       const timer = setTimeout(() => {
-        handleDismiss();
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => {
+          setIsVisible(false);
+          onDismiss();
+        });
       }, duration);
 
       // Cleanup timer on unmount or visibility change
       return () => clearTimeout(timer);
-    } else {
-      handleDismiss();
+    } else if (isVisible) {
+      // Only dismiss if currently visible to avoid unnecessary animations
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsVisible(false);
+      });
     }
-  }, [visible, duration, fadeAnim, handleDismiss]);
+  }, [visible, duration, fadeAnim, onDismiss, isVisible]);
 
   /**
    * Handles action button press
    * Dismisses snackbar and calls action callback
    */
-  const handleAction = () => {
-    handleDismiss();
-    onAction?.();
-  };
+  const handleAction = useCallback(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsVisible(false);
+      onAction?.();
+    });
+  }, [fadeAnim, onAction]);
 
   // Don't render if not visible
   if (!isVisible) {

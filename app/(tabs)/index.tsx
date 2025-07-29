@@ -4,9 +4,10 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, LayoutAnimation, Platform, StyleSheet, TouchableOpacity, UIManager, View } from 'react-native';
+import { FlatList, LayoutAnimation, Platform, StyleSheet, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { SwipeToDelete } from '@/components/SwipeToDelete';
 import { useTaskContext } from '@/contexts/TaskContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { ThemedText } from '@/src/components/common/ThemedText';
@@ -106,6 +107,7 @@ export default function HomeScreen() {
 
   /**
    * Handles task deletion with undo functionality
+   * Since swipe-to-delete is an intentional gesture, no confirmation is needed
    * 
    * @param taskId - Unique identifier of the task to delete
    * @param taskTitle - Title of the task for display in snackbar
@@ -118,30 +120,6 @@ export default function HomeScreen() {
       setDeletedTaskTitle(taskTitle);
       setSnackbarVisible(true);
     }
-  };
-
-  /**
-   * Handles long press gesture on tasks to show delete confirmation
-   * 
-   * @param taskId - Unique identifier of the task
-   * @param taskTitle - Title of the task for confirmation dialog
-   */
-  const handleLongPress = (taskId: string, taskTitle: string) => {
-    Alert.alert(
-      'Delete Task',
-      `Are you sure you want to delete "${taskTitle}"?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => handleDeleteTask(taskId, taskTitle),
-        },
-      ]
-    );
   };
 
   /**
@@ -179,86 +157,90 @@ export default function HomeScreen() {
   };
 
   /**
-   * Renders a single task item in the FlatList
+   * Renders a single task item in the FlatList with swipe-to-delete functionality
    * 
    * @param item - Task object to render
-   * @returns JSX.Element - Rendered task item
+   * @returns JSX.Element - Rendered task item wrapped in SwipeToDelete
    */
   const renderTaskItem = ({ item }: { item: Task }) => (
-    <TouchableOpacity
-      style={[
-        styles.taskCard,
-        { borderColor },
-        item.completed && styles.completedTask
-      ]}
-      onPress={() => handleToggleTaskCompletion(item.id)}
-      onLongPress={() => handleLongPress(item.id, item.title)}
-      delayLongPress={600}
+    <SwipeToDelete
+      onDelete={() => handleDeleteTask(item.id, item.title)}
+      disabled={item.completed} // Disable swipe for completed tasks to prevent accidental deletion
     >
-      <View style={styles.taskHeader}>
-        {/* Category color indicator */}
-        <View style={[styles.categoryIndicator, { backgroundColor: getTaskCategoryColor(item.category) }]} />
-        
-        <View style={styles.taskInfo}>
-          <View style={styles.taskTitleRow}>
-            <ThemedText
-              type="defaultSemiBold"
-              style={[
-                styles.taskTitle,
-                item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
-              ]}
-            >
-              {item.title}
-            </ThemedText>
-            {/* Priority badge */}
-            {item.priority && (
-              <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
-                {item.priority}
+      <TouchableOpacity
+        style={[
+          styles.taskCard,
+          { borderColor },
+          item.completed && styles.completedTask
+        ]}
+        onPress={() => handleToggleTaskCompletion(item.id)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.taskHeader}>
+          {/* Category color indicator */}
+          <View style={[styles.categoryIndicator, { backgroundColor: getTaskCategoryColor(item.category) }]} />
+          
+          <View style={styles.taskInfo}>
+            <View style={styles.taskTitleRow}>
+              <ThemedText
+                type="defaultSemiBold"
+                style={[
+                  styles.taskTitle,
+                  item.completed && { color: completedTextColor, textDecorationLine: 'line-through' }
+                ]}
+              >
+                {item.title}
               </ThemedText>
+              {/* Priority badge */}
+              {item.priority && (
+                <ThemedText style={[styles.priorityBadge, { color: '#FF3B30' }]}>
+                  {item.priority}
+                </ThemedText>
+              )}
+            </View>
+            
+            {/* Category tag */}
+            <ThemedText style={styles.categoryTag}>
+              {item.category}
+            </ThemedText>
+            
+            {/* Task description */}
+            {item.description && (
+              <ThemedText
+                style={[
+                  styles.taskDescription,
+                  item.completed && { color: completedTextColor }
+                ]}
+              >
+                {item.description}
+              </ThemedText>
+            )}
+            
+            {/* Subtasks list */}
+            {item.subtasks && item.subtasks.length > 0 && (
+              <View style={styles.subtasksContainer}>
+                {item.subtasks.map((subtask) => (
+                  <ThemedText key={subtask.id} style={styles.subtaskText}>
+                    • {subtask.name}
+                  </ThemedText>
+                ))}
+              </View>
             )}
           </View>
           
-          {/* Category tag */}
-          <ThemedText style={styles.categoryTag}>
-            {item.category}
-          </ThemedText>
-          
-          {/* Task description */}
-          {item.description && (
-            <ThemedText
-              style={[
-                styles.taskDescription,
-                item.completed && { color: completedTextColor }
-              ]}
-            >
-              {item.description}
-            </ThemedText>
-          )}
-          
-          {/* Subtasks list */}
-          {item.subtasks && item.subtasks.length > 0 && (
-            <View style={styles.subtasksContainer}>
-              {item.subtasks.map((subtask) => (
-                <ThemedText key={subtask.id} style={styles.subtaskText}>
-                  • {subtask.name}
-                </ThemedText>
-              ))}
-            </View>
-          )}
+          {/* Completion checkbox */}
+          <View style={[
+            styles.checkbox,
+            { borderColor },
+            item.completed && styles.checkedBox
+          ]}>
+            {item.completed && (
+              <ThemedText style={styles.checkmark}>✓</ThemedText>
+            )}
+          </View>
         </View>
-        
-        {/* Completion checkbox */}
-        <View style={[
-          styles.checkbox,
-          { borderColor },
-          item.completed && styles.checkedBox
-        ]}>
-          {item.completed && (
-            <ThemedText style={styles.checkmark}>✓</ThemedText>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </SwipeToDelete>
   );
 
   // Calculate completion statistics
@@ -303,7 +285,7 @@ export default function HomeScreen() {
           </ThemedText>
           {tasks.length > 0 && (
             <ThemedText style={styles.helpText}>
-              Tap to complete • Long press to delete
+              Tap to complete • Swipe left to delete
             </ThemedText>
           )}
           
